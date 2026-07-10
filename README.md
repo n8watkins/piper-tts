@@ -47,6 +47,47 @@ model (`kokoro-v1.0.onnx`, ~310 MB) and voices (`voices-v1.0.bin`, ~27 MB) into
 Loads the model once (~1-2 s) and serves on `127.0.0.1:7478`. Override with
 `KOKORO_HOST` / `KOKORO_PORT`.
 
+`start.sh` runs the server in the **foreground with no supervision** - fine for a
+quick manual run, but if the launching terminal closes (or the process crashes /
+is OOM-killed) it dies silently and permanently. For an always-on engine, use the
+supervised install below instead.
+
+## Supervision (auto-start + auto-restart)
+
+Recommended: a systemd **user** service. It starts the server at login and
+restarts it on any exit (crash, OOM, or the `SIGHUP` from a closed terminal - the
+exact silent-death that motivated this), and journald captures the logs.
+
+```bash
+./install-service.sh
+```
+
+The script writes `~/.config/systemd/user/kokoro-tts.service` (from the template
+in `systemd/`, with the repo path substituted), enables + starts it, and turns on
+user lingering so it survives logout.
+
+```bash
+journalctl --user -u kokoro-tts.service -f      # logs
+systemctl --user restart kokoro-tts.service     # restart
+systemctl --user disable --now kokoro-tts.service   # remove
+```
+
+> The service binds `127.0.0.1:7478`. If an instance is already running there
+> (e.g. a manual `nohup ./start.sh`), stop it first or the service will fail to
+> bind. The install script checks `/health` and refuses to proceed if the port is
+> already served.
+
+No systemd user instance on this host (`systemctl --user` fails)? Fall back to a
+detached launch plus a reboot hook:
+
+```bash
+setsid nohup ./start.sh >/tmp/kokoro-tts.log 2>&1 &   # detached, logged
+(crontab -l 2>/dev/null; echo "@reboot setsid nohup $PWD/start.sh >/tmp/kokoro-tts.log 2>&1") | crontab -
+```
+
+(That covers reboot + terminal-close, but not crash-restart - systemd is
+preferred where available.)
+
 ## Verify
 
 ```bash
