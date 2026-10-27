@@ -1,0 +1,6 @@
+{
+  "versionFiles": [
+    "extension/manifest.json"
+  ],
+  "workflows": "package"
+}

@@ -11,14 +11,17 @@
     "version:minor": "node tools/bump-version.mjs minor",
     "version:major": "node tools/bump-version.mjs major",
     "deploy": "node tools/deploy-windows.mjs",
-    "screenshots": "node tools/capture-screenshots.mjs"
+    "screenshots": "node tools/capture-screenshots.mjs",
+    "release": "release-kit release",
+    "release:check": "release-kit check && npm test && npm run build"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.0",
+    "release-kit": "github:n8watkins/release-kit#v2.0.0"
   },
   "engines": {
     "node": ">=18"
