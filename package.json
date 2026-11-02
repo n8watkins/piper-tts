@@ -6,14 +6,15 @@
   "scripts": {
     "prepare": "git config core.hooksPath tools/hooks || true",
     "build": "node tools/build-extension-ui.mjs",
-    "test": "node --test",
+    "test": "node --test && npm run test:kokoro",
     "version:patch": "node tools/bump-version.mjs patch",
     "version:minor": "node tools/bump-version.mjs minor",
     "version:major": "node tools/bump-version.mjs major",
     "deploy": "node tools/deploy-windows.mjs",
     "screenshots": "node tools/capture-screenshots.mjs",
     "release": "release-kit release",
-    "release:check": "release-kit check && npm test && npm run build"
+    "release:check": "release-kit check && npm test && npm run build",
+    "test:kokoro": "python3 -m unittest discover -s servers/kokoro/tests"
   },
   "dependencies": {
     "react": "^18.3.1",
