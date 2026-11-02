@@ -18,11 +18,11 @@ The browser's built-in voice is a third choice and the automatic fallback when a
 
 ## Screenshots
 
-<img src="screenshots/popup.png" alt="VoiceDock popup showing a Kokoro profile with speed, volume, test, and stop controls" width="300">
+<img src="screenshots/popup.png" alt="VoiceDock popup showing a Piper profile with speed, volume, test, and stop controls" width="300">
 
-<img src="screenshots/options-profiles.png" alt="Profiles tab, editing a profile that uses the Kokoro engine" width="560">
+<img src="screenshots/options-profiles.png" alt="Profiles tab with Piper and Kokoro profiles" width="560">
 
-<img src="screenshots/options-voices.png" alt="Voices tab listing Kokoro voices, with a switch between Piper and Kokoro" width="560">
+<img src="screenshots/options-voices.png" alt="Voices tab listing Piper voices, with a switch between Piper and Kokoro" width="560">
 
 <img src="screenshots/options-settings.png" alt="Settings tab with the browser fallback, both engine servers, and keyboard shortcuts" width="560">
 
