@@ -18,7 +18,7 @@ if git diff --cached --name-only \
     # Refuse rather than exit 0: a UI-source change committed without rebuilding
     # would ship a stale extension/dist, which is exactly what this hook exists
     # to prevent. Force the developer to install deps so the bundles get rebuilt.
-    echo "pre-commit: esbuild not installed — run 'npm install', then re-commit (refusing to commit a possibly-stale extension/dist)." >&2
+    echo "pre-commit: esbuild not installed - run 'npm install', then re-commit (refusing to commit a possibly-stale extension/dist)." >&2
     exit 1
   fi
 

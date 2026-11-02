@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 // If that import path were wrong, or background.js didn't parse as an ES module,
 // Chrome would fail to register the worker outright. Importing it here under a
 // minimal `chrome` shim exercises exactly that path: the file parses as ESM, its
-// ./src/shared.js import resolves, and its top-level code — which registers every
-// event listener — runs to completion without throwing.
+// ./src/shared.js import resolves, and its top-level code - which registers every
+// event listener - runs to completion without throwing.
 //
 // (Chrome no longer allows loading an unpacked extension from the command line,
 // so this stands in for a live service-worker registration check.)
@@ -47,7 +47,7 @@ function makeChromeShim() {
 test('background service worker loads as a module and registers its listeners', async () => {
   globalThis.chrome = makeChromeShim();
 
-  // Resolves only if background.js parses as ESM and ./src/shared.js is found —
+  // Resolves only if background.js parses as ESM and ./src/shared.js is found -
   // the exact conditions Chrome needs to register the module service worker.
   await import('../extension/background.js');
 

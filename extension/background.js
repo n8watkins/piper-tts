@@ -40,7 +40,7 @@ async function rebuildMenus() {
 
   const { profiles, activeId } = await getProfileState();
 
-  // Main read item — uses the active profile
+  // Main read item - uses the active profile
   chrome.contextMenus.create({
     id:       "read-selection",
     title:    "Read selected text aloud",
@@ -274,7 +274,7 @@ async function speakWithEngine(engine, text, settings) {
   try {
     await ensureOffscreenDocument();
   } catch (err) {
-    // Unexpected offscreen creation error — reset flag so the popup/shortcut
+    // Unexpected offscreen creation error - reset flag so the popup/shortcut
     // don't get stuck in "Playing" state forever.
     _isPlaying = false;
     _playbackEngine = null;
@@ -476,19 +476,19 @@ chrome.commands.onCommand.addListener((command) => {
 
 // ─── Messages from Popup / Content Script / Offscreen ────────────────────────
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Content script tab is navigating/closing — stop if it was the source tab
+  // Content script tab is navigating/closing - stop if it was the source tab
   if (message.type === "tab-unloading") {
     if (_playingSourceTabId !== null && sender.tab?.id === _playingSourceTabId) {
       stopAll();
     }
     return;
   }
-  // stop-all: fire-and-forget — respond immediately so the popup can close
+  // stop-all: fire-and-forget - respond immediately so the popup can close
   // without leaving an open message channel that Chrome will kill mid-flight.
   if (message.type === "stop-all") {
     stopAll();
     sendResponse({ ok: true });
-    return; // synchronous — no return true, no dangling channel
+    return; // synchronous - no return true, no dangling channel
   }
 
   // Offscreen notifies us when queue finishes naturally
@@ -561,7 +561,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // Keyboard shortcut: Alt+Shift+R — always START reading with selected text.
+  // Keyboard shortcut: Alt+Shift+R - always START reading with selected text.
   // Stop is handled in the content script (sends stop-all when _localPlaying is true).
   // This avoids the wrong-tab problem where Tab B's poll saw Tab A as "playing"
   // and keyboard-read would stop instead of start.
@@ -578,7 +578,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   // Overlay rocker: change the CURRENT playback's volume/speed only. These are
-  // deliberately NOT written back to the active profile — the profile keeps its
+  // deliberately NOT written back to the active profile - the profile keeps its
   // saved presets; this just nudges what's playing right now.
   if (message.type === "set-live-volume" || message.type === "set-live-rate") {
     const isVolume = message.type === "set-live-volume";
@@ -609,7 +609,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // async response
   }
 
-  // Keyboard shortcut: Alt+Shift+D — pause/resume toggle
+  // Keyboard shortcut: Alt+Shift+D - pause/resume toggle
   if (message.type === "keyboard-pause") {
     togglePauseResume().catch(err => console.error("[keyboard-pause]", err));
     return;

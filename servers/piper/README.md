@@ -54,9 +54,9 @@ servers/piper/
 ```
 
 Other good English voices to try:
-- `en_US-lessac-medium` — clear, neutral US voice
-- `en_US-ryan-high` — higher quality male voice
-- `en_GB-alan-medium` — British English
+- `en_US-lessac-medium` - clear, neutral US voice
+- `en_US-ryan-high` - higher quality male voice
+- `en_GB-alan-medium` - British English
 
 ### 4. Start the server
 
@@ -144,7 +144,7 @@ Generate speech from text.
 }
 ```
 
-`voice` is optional — defaults to `en_US-ryan-high.onnx`. The selected `.onnx` file and matching `.onnx.json` config must both exist in the voices folder.
+`voice` is optional - defaults to `en_US-ryan-high.onnx`. The selected `.onnx` file and matching `.onnx.json` config must both exist in the voices folder.
 
 **Response:** `audio/wav` binary stream.
 

@@ -1,7 +1,7 @@
 // Cross-platform Piper TTS tray (Windows / macOS / Linux).
 //
 // One Node codebase replacing the per-OS tray scripts. It shows server status
-// as a green/red dot (swapping pre-rendered icon files — no runtime drawing, so
+// as a green/red dot (swapping pre-rendered icon files - no runtime drawing, so
 // it ports cleanly), and offers Start/Stop/Open-Voices/Quit. The local server is
 // already Node, so the tray reuses the same runtime.
 //
@@ -48,7 +48,7 @@ const isAlive = (pid) => { try { process.kill(pid, 0); return true; } catch { re
         console.error(`Piper tray already running (pid ${owner}); exiting.`);
         process.exit(0);
       }
-      // Stale lock (owner gone) — clear it once and retry.
+      // Stale lock (owner gone) - clear it once and retry.
       if (attempt < 1) { fs.rmSync(LOCK_FILE, { force: true }); acquireLock(attempt + 1); return; }
     }
     // Any other error: proceed without a lock rather than failing to launch.
@@ -89,7 +89,7 @@ function startServer() {
   const out = fs.openSync(path.join(LOG_DIR, 'piper-tts-server.log'), 'a');
   const child = spawn(process.execPath, ['server.js'], {
     // windowsHide hides the console window a detached child would otherwise pop
-    // up on Windows — that was the CMD flash, not the (already-hidden) tray.
+    // up on Windows - that was the CMD flash, not the (already-hidden) tray.
     cwd: SERVER_DIR, detached: true, windowsHide: true, stdio: ['ignore', out, out],
   });
   try { fs.writeFileSync(PID_FILE, String(child.pid)); } catch { /* ignore */ }
@@ -102,7 +102,7 @@ function stopServer() {
   try { fs.unlinkSync(PID_FILE); } catch { /* ignore */ }
 }
 // Is something already listening on the port? (Used so a restart waits for the
-// old process to release it — otherwise the new server hits EADDRINUSE.)
+// old process to release it - otherwise the new server hits EADDRINUSE.)
 const portInUse = () => new Promise((resolve) => {
   const s = net.connect({ host: HOST, port: PORT });
   s.on('connect', () => { s.destroy(); resolve(true); });
@@ -153,7 +153,7 @@ function installAutostart() {
   try { fs.mkdirSync(path.dirname(file), { recursive: true }); } catch { /* ignore */ }
   if (isWin) {
     // Startup shortcut runs the .vbs via wscript (a windowless host) so node
-    // starts hidden — no CMD flash at login, unlike a .bat launcher.
+    // starts hidden - no CMD flash at login, unlike a .bat launcher.
     const vbs = path.join(SERVER_DIR, 'scripts', 'start-piper-tray.vbs');
     const ps = `$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${file}');` +
       `$s.TargetPath='C:\\Windows\\System32\\wscript.exe';$s.Arguments='"${vbs}"';` +
@@ -206,7 +206,7 @@ const menu = {
 };
 const systray = new SysTray({ menu, debug: false, copyDir: true });
 
-let intendedRunning = false; // user/auto wants it up — gates crash supervision
+let intendedRunning = false; // user/auto wants it up - gates crash supervision
 let restarts = 0;
 let lastKey = '';
 
@@ -231,7 +231,7 @@ async function refresh() {
   stopItem.enabled = managed;
   restartItem.enabled = managed;
 
-  // update-menu only refreshes the icon/tooltip — the rendered menu items must be
+  // update-menu only refreshes the icon/tooltip - the rendered menu items must be
   // updated individually with update-item (same path the working login toggle uses).
   for (const item of [statusItem, startItem, stopItem, restartItem]) {
     systray.sendAction({ type: 'update-item', item }).catch(() => {});

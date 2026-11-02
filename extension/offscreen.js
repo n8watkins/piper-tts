@@ -7,7 +7,7 @@ let currentBlobUrl = null;
 let rejectCurrentPlay = null;    // C1: lets stopCurrentAudio() settle a pending playBlob() Promise
 let currentDisconnectNodes = null; // stores the active chunk's disconnectNodes so stopCurrentAudio can call it
 let currentGainNode = null;      // exposed so set-volume can adjust gain in real-time
-let audioCtx = null;             // Web Audio API context — reused across chunks for volume boost
+let audioCtx = null;             // Web Audio API context - reused across chunks for volume boost
 let playbackQueue = [];
 let isPlaying = false;
 let isPaused  = false; // true while audio is paused mid-queue
@@ -41,8 +41,8 @@ function splitIntoChunks(text, maxLength = 350, firstMaxLength = 140) {
   let current = "";
 
   for (const sentence of sentences) {
-    // Cap the first chunk smaller so the first audio synthesizes — and starts
-    // playing — sooner; later chunks use the full length for fewer requests.
+    // Cap the first chunk smaller so the first audio synthesizes - and starts
+    // playing - sooner; later chunks use the full length for fewer requests.
     const cap = chunks.length === 0 ? firstMaxLength : maxLength;
     const candidate = current ? current + " " + sentence : sentence;
     if (candidate.length > cap) {
@@ -63,7 +63,7 @@ function splitIntoChunks(text, maxLength = 350, firstMaxLength = 140) {
 const FETCH_TIMEOUT_MS = 30_000;
 
 // In-flight fetches so a stop (or a new speak request) can abort a prefetch
-// that's still synthesizing on the server — otherwise the discarded chunk keeps
+// that's still synthesizing on the server - otherwise the discarded chunk keeps
 // running for up to FETCH_TIMEOUT_MS, wasting engine CPU on audio nobody hears.
 const activeFetches = new Set();
 function abortPendingFetches() {
@@ -119,7 +119,7 @@ function playBlob(blob, volume = 1.0, rate = 1.0) {
     currentAudio = new Audio(url);
     currentAudio.playbackRate = Math.max(0.1, Math.min(4.0, rate));
 
-    // Volume via Web Audio API GainNode — allows values > 1.0 for boost.
+    // Volume via Web Audio API GainNode - allows values > 1.0 for boost.
     // Standard audio.volume is capped at 1.0; GainNode has no upper limit.
     if (!audioCtx || audioCtx.state === "closed") {
       audioCtx = new AudioContext();
@@ -246,7 +246,7 @@ async function playQueue(chunks, ttsUrl, voice, engine, generation) {
   let pending = fetchChunk(0);
 
   const reportError = (err) => {
-    if (err && err.isStop === true) return; // intentional stop — exit silently
+    if (err && err.isStop === true) return; // intentional stop - exit silently
     if (live()) {
       console.error("TTS chunk error:", err);
       failed = true;
@@ -364,6 +364,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
 
     sendResponse({ ok: true });
-    return false; // synchronous response already sent — port can close immediately
+    return false; // synchronous response already sent - port can close immediately
   }
 });

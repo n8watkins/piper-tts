@@ -136,7 +136,7 @@ async function validateVoiceFile(name) {
 // C10 fix: uses a `settled` flag so the timeout handler and the `close` event
 // can both run without a second reject() call on an already-settled Promise.
 //
-// S1 fix: Piper reads text from stdin — there is no --input-file flag.
+// S1 fix: Piper reads text from stdin - there is no --input-file flag.
 // Passing an unrecognised flag caused Piper to silently wait for stdin forever,
 // hitting our 60 s timeout on every request. Also corrected --output-file →
 // --output_file (underscore) to match Piper's actual CLI.
@@ -222,12 +222,12 @@ app.post("/tts", async (req, res) => {
     // Ensure output directory exists
     await fs.mkdir(OUTPUT_DIR, { recursive: true });
 
-    // Run Piper — text is passed via stdin (S1 fix)
+    // Run Piper - text is passed via stdin (S1 fix)
     await runPiper({ text: cleanText, outputPath, voiceModel: safeVoice });
 
     // Stream the WAV back
     // S2 fix: replaced sendFile (broken on Windows with root:"/") with a plain
-    // createReadStream pipe — works on all platforms without path quirks.
+    // createReadStream pipe - works on all platforms without path quirks.
     res.setHeader("Content-Type", "audio/wav");
     res.setHeader("Cache-Control", "no-store");
 

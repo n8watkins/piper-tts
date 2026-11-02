@@ -2,7 +2,7 @@
 //
 //   node setup.js          (or: npm run setup)
 //
-// Adapts to the OS at runtime — there's no per-OS installer. It:
+// Adapts to the OS at runtime - there's no per-OS installer. It:
 //   1. installs the server's Node dependencies,
 //   2. downloads the Piper binary for this OS/arch (if missing),
 //   3. downloads a default voice (if missing),
@@ -27,7 +27,7 @@ const isWin = process.platform === 'win32';
 const isMac = process.platform === 'darwin';
 const arm = process.arch === 'arm64';
 
-// ── Config — the only thing that needs updating if upstream URLs change ────────
+// ── Config - the only thing that needs updating if upstream URLs change ────────
 const PIPER_ASSET =
   isWin ? 'piper_windows_amd64.zip' :
   isMac ? (arm ? 'piper_macos_aarch64.tar.gz' : 'piper_macos_x64.tar.gz') :
@@ -50,7 +50,7 @@ function download(url, dest, redirects = 6) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
     // A write failure (disk full, read-only dest) emits 'error' on the stream,
-    // not on the request — without this listener it would be an unhandled event
+    // not on the request - without this listener it would be an unhandled event
     // that crashes the whole setup instead of rejecting cleanly.
     file.on('error', (err) => {
       try { file.close(); } catch { /* ignore */ }
@@ -76,7 +76,7 @@ function download(url, dest, redirects = 6) {
 }
 
 async function installPiper() {
-  if (fs.existsSync(PIPER_BIN)) { log('• Piper binary already present — skipping.'); return; }
+  if (fs.existsSync(PIPER_BIN)) { log('• Piper binary already present - skipping.'); return; }
   const archive = path.join(os.tmpdir(), PIPER_ASSET);
   log(`• Downloading Piper (${PIPER_ASSET})…`);
   await download(PIPER_URL, archive);
@@ -98,7 +98,7 @@ async function installPiper() {
 async function installVoice(v) {
   const onnx = path.join(VOICES_DIR, `${v.name}.onnx`);
   const json = path.join(VOICES_DIR, `${v.name}.onnx.json`);
-  if (fs.existsSync(onnx) && fs.existsSync(json)) { log(`• Voice ${v.name} already present — skipping.`); return; }
+  if (fs.existsSync(onnx) && fs.existsSync(json)) { log(`• Voice ${v.name} already present - skipping.`); return; }
   log(`• Downloading voice ${v.name}…`);
   await download(`${HF_BASE}/${v.dir}/${v.name}.onnx`, onnx);
   await download(`${HF_BASE}/${v.dir}/${v.name}.onnx.json`, json);
@@ -120,7 +120,7 @@ async function main() {
   spawn(process.execPath, [TRAY], { cwd: SERVER_DIR, detached: true, stdio: 'ignore', windowsHide: true }).unref();
 
   log('\n✓ Setup complete.');
-  log('  The Piper tray is running (look for the icon — green dot = server up).');
+  log('  The Piper tray is running (look for the icon - green dot = server up).');
   log('  It auto-starts the server, set up launch-at-login, and shows status.');
   log('  Add or remove voices anytime from the Chrome extension’s Settings → Voices.');
 }

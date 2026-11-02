@@ -59,7 +59,7 @@ body {
 .status-dot.online  { background: #a6e3a1; }
 .status-dot.offline { background: #f38ba8; }
 
-/* Gear button — bigger, more visible */
+/* Gear button - bigger, more visible */
 .btn-gear {
   background: #313244;
   border: 1px solid #45475a;
@@ -92,7 +92,7 @@ body {
   text-align: center;
 }
 
-/* Profile name — the hero element, must be large and readable */
+/* Profile name - the hero element, must be large and readable */
 .profile-name {
   display: block;
   font-size: 18px;
@@ -114,7 +114,7 @@ body {
   text-overflow: ellipsis;
 }
 
-/* Nav arrows — bigger tap targets */
+/* Nav arrows - bigger tap targets */
 .btn-nav {
   background: #1e1e2e;
   border: 1px solid #45475a;
@@ -168,7 +168,7 @@ body {
   gap: 8px;
 }
 
-/* Slider label — readable size, better contrast */
+/* Slider label - readable size, better contrast */
 .slider-lbl {
   font-size: 11px;
   font-weight: 700;
@@ -206,7 +206,7 @@ body {
   border-radius: 50%; background: #cba6f7; cursor: pointer;
 }
 
-/* Slider value — larger, always readable */
+/* Slider value - larger, always readable */
 .slider-val {
   font-size: 12px;
   font-weight: 700;

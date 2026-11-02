@@ -3,7 +3,7 @@ node_modules/
 npm-debug.log*
 yarn-error.log*
 
-# Piper binaries (download separately — see README)
+# Piper binaries (download separately - see README)
 servers/piper/piper/piper.exe
 servers/piper/piper/piper
 servers/piper/piper/voices/*.onnx

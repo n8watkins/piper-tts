@@ -13,7 +13,7 @@ document.addEventListener("mouseup",         _snapshotSel, true);
 document.addEventListener("selectionchange", _snapshotSel);
 document.addEventListener("keyup",           _snapshotSel, true); // keyboard selections (Shift+arrow)
 
-// ─── Local playback state (optimistic — for instant UI updates) ───────────────
+// ─── Local playback state (optimistic - for instant UI updates) ───────────────
 let _localPlaying  = false;
 let _localPaused   = false;
 let _currentVolume = 1.0;
@@ -404,7 +404,7 @@ function fmtRate(v) {
 }
 
 // Builds the speaker button + the hover popover holding the Speed and Volume
-// sliders. Adjustments change only the current playback — they are NOT written
+// sliders. Adjustments change only the current playback - they are NOT written
 // back to the saved profile (background.js handles set-live-* without storage).
 function buildRocker() {
   const wrap = document.createElement("div");
