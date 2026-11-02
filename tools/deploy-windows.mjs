@@ -6,8 +6,8 @@
 //
 //   node tools/deploy-windows.mjs
 //
-// Override the destination with PIPER_TTS_WINDOWS_DIR, or the user with
-// PIPER_TTS_WINDOWS_USER. After it runs, reload the extension at
+// Override the destination with LOCALVOICE_WINDOWS_DIR (or the older
+// PIPER_TTS_WINDOWS_DIR), or the user with PIPER_TTS_WINDOWS_USER. After it runs, reload the extension at
 // chrome://extensions to pick up the changes.
 import { execFileSync } from 'child_process';
 import { existsSync } from 'fs';
@@ -18,13 +18,14 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const windowsUser = process.env.PIPER_TTS_WINDOWS_USER || 'natha';
 const toolsDir = `/mnt/c/Users/${windowsUser}/Projects/Tools`;
 
-// Destination: explicit override wins; otherwise prefer a renamed piper-tts
-// folder, falling back to the original local-tts-reader.
-const dest = process.env.PIPER_TTS_WINDOWS_DIR ||
-  [join(toolsDir, 'piper-tts'), join(toolsDir, 'local-tts-reader')].find(existsSync);
+// Destination: explicit override wins; otherwise prefer a LocalVoice clone
+// (see UPDATE_WINDOWS_SERVER.md), then the older piper-tts and
+// local-tts-reader folders.
+const dest = process.env.LOCALVOICE_WINDOWS_DIR || process.env.PIPER_TTS_WINDOWS_DIR ||
+  ['localvoice', 'piper-tts', 'local-tts-reader'].map((name) => join(toolsDir, name)).find(existsSync);
 
 if (!dest || !existsSync(dest)) {
-  console.error('Windows project folder not found. Set PIPER_TTS_WINDOWS_DIR to its path.');
+  console.error('Windows project folder not found. Set LOCALVOICE_WINDOWS_DIR to its path.');
   process.exit(1);
 }
 if (!existsSync(join(dest, 'extension'))) {
