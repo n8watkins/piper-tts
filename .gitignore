@@ -8,6 +8,8 @@ servers/piper/piper/piper.exe
 servers/piper/piper/piper
 servers/piper/piper/voices/*.onnx
 servers/piper/piper/voices/*.onnx.json
+# Named node.exe copy that N8 Tray's n8piper wrapper creates beside server.js
+servers/piper/piper-tts-server.exe
 
 # Generated audio output
 servers/piper/output/*.wav

@@ -26,9 +26,15 @@ const chromePath = process.env.PIPER_TTS_CHROME_PATH || 'C:\\Program Files\\Goog
 const windowsNode = process.env.PIPER_TTS_WINDOWS_NODE || '/mnt/c/Program Files/nodejs/node.exe';
 
 const sampleProfiles = [
-  { id: 'article', name: 'Articles', voice: 'en_US-ryan-high.onnx', rate: 1.2, volume: 1.1 },
-  { id: 'study', name: 'Study Notes', voice: 'en_US-amy-medium.onnx', rate: 0.9, volume: 1.0 },
-  { id: 'fast', name: 'Fast Review', voice: 'en_GB-alan-medium.onnx', rate: 1.6, volume: 1.2 },
+  { id: 'article', name: 'Articles', engine: 'piper', voice: 'en_US-ryan-high.onnx', rate: 1.2, volume: 1.1 },
+  { id: 'long', name: 'Long Reads', engine: 'kokoro', voice: 'af_heart', rate: 1.0, volume: 1.0 },
+  { id: 'study', name: 'Study Notes', engine: 'kokoro', voice: 'bf_emma', rate: 0.9, volume: 1.0 },
+  { id: 'fast', name: 'Fast Review', engine: 'piper', voice: 'en_GB-alan-medium.onnx', rate: 1.6, volume: 1.2 },
+];
+
+const sampleKokoroVoices = [
+  'af_bella', 'af_heart', 'af_nicole', 'am_adam', 'am_michael',
+  'bf_emma', 'bm_george', 'ef_dora', 'ff_siwis', 'jf_alpha',
 ];
 
 const sampleVoices = [
@@ -43,6 +49,7 @@ const chromeShim = `
 (() => {
   const profiles = ${JSON.stringify(sampleProfiles)};
   const voices = ${JSON.stringify(sampleVoices)};
+  const kokoroVoices = ${JSON.stringify(sampleKokoroVoices)};
   const voiceSizes = {
     'en_US-ryan-high.onnx': 146000000,
     'en_US-amy-medium.onnx': 64000000,
@@ -52,7 +59,8 @@ const chromeShim = `
   const storage = {
     profiles,
     activeId: 'article',
-    favorites: ['en_US-ryan-high.onnx', 'en_US-amy-medium.onnx'],
+    favoritesByEngine: { piper: ['en_US-ryan-high.onnx', 'en_US-amy-medium.onnx'], kokoro: ['af_heart'] },
+    settingsVersion: 2,
     deletedVoices: [
       { filename: 'en_US-old-low.onnx', displayName: 'Old · Low', deletedAt: '6/3/2026' },
     ],
@@ -64,17 +72,29 @@ const chromeShim = `
   const originalFetch = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input.url;
+    if (url && url.startsWith('http://127.0.0.1:7478')) {
+      const path = new URL(url).pathname;
+      const json = (body) => new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (path === '/health') return json({ status: 'ok', engine: 'kokoro', version: '1.0.0', voices: kokoroVoices.length });
+      if (path === '/voices') return json({ engine: 'kokoro', voices: kokoroVoices, defaultVoice: 'af_heart' });
+      if (path === '/tts') return new Response(new Blob([], { type: 'audio/wav' }), { status: 200 });
+    }
     if (url && url.startsWith('http://127.0.0.1:7477')) {
       const path = new URL(url).pathname;
       if (path === '/health') {
-        return new Response(JSON.stringify({ status: 'ok', version: '1.0.0' }), {
+        return new Response(JSON.stringify({ status: 'ok', engine: 'piper', version: '1.0.0' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
       }
       if (path === '/voices') {
         return new Response(JSON.stringify({
+          engine: 'piper',
           voices,
+          defaultVoice: 'en_US-ryan-high.onnx',
           sizes: voiceSizes,
           voiceDir: 'C:\\\\Users\\\\${windowsUser}\\\\Projects\\\\Tools\\\\piper-tts\\\\servers\\\\piper\\\\piper\\\\voices',
         }), {
@@ -120,12 +140,12 @@ const chromeShim = `
   window.chrome = {
     runtime: {
       lastError: null,
-      getManifest: () => ({ version: '${manifest.version}', name: 'Piper TTS' }),
+      getManifest: () => ({ version: '${manifest.version}', name: 'LocalVoice' }),
       openOptionsPage: () => {},
       sendMessage(message, callback) {
         const response = message?.type === 'get-playback-state'
           ? { isPlaying: false, isPaused: false, volume: 1.1, progress: null }
-          : { ok: true };
+          : { ok: true, engine: message?.settings?.engine || 'piper', fellBack: false };
         if (callback) setTimeout(() => callback(response), 10);
         return Promise.resolve(response);
       },

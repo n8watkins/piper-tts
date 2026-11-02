@@ -18,11 +18,13 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const windowsUser = process.env.PIPER_TTS_WINDOWS_USER || 'natha';
 const toolsDir = `/mnt/c/Users/${windowsUser}/Projects/Tools`;
 
-// Destination: explicit override wins; otherwise prefer a LocalVoice clone
-// (see UPDATE_WINDOWS_SERVER.md), then the older piper-tts and
-// local-tts-reader folders.
+// Destination: explicit override wins; otherwise the piper-tts folder Chrome
+// already loads, then a localvoice clone, then the original local-tts-reader.
+// piper-tts comes first on purpose: an unpacked extension's ID (and with it
+// every saved profile) is derived from its folder path, so moving Chrome to a
+// new folder would start from empty settings. See UPDATE_WINDOWS_SERVER.md.
 const dest = process.env.LOCALVOICE_WINDOWS_DIR || process.env.PIPER_TTS_WINDOWS_DIR ||
-  ['localvoice', 'piper-tts', 'local-tts-reader'].map((name) => join(toolsDir, name)).find(existsSync);
+  ['piper-tts', 'localvoice', 'local-tts-reader'].map((name) => join(toolsDir, name)).find(existsSync);
 
 if (!dest || !existsSync(dest)) {
   console.error('Windows project folder not found. Set LOCALVOICE_WINDOWS_DIR to its path.');
