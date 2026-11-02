@@ -8,11 +8,11 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "start:unix": "sh scripts/start-unix.sh",
-    "tray": "node tray/piper-tray.js",
+    "tray": "node tray/voicedock-tray.js",
     "start:windows": "powershell -ExecutionPolicy Bypass -File scripts/start-windows.ps1",
     "start:windows:bg": "powershell -ExecutionPolicy Bypass -File scripts/start-background-windows.ps1",
     "stop:windows:bg": "powershell -ExecutionPolicy Bypass -File scripts/stop-background-windows.ps1",
-    "start:windows:tray": "wscript scripts\\start-piper-tray.vbs",
+    "start:windows:tray": "wscript scripts\\start-voicedock-tray.vbs",
     "install:windows:tray": "powershell -ExecutionPolicy Bypass -File scripts/install-tray-startup-windows.ps1",
     "uninstall:windows:tray": "powershell -ExecutionPolicy Bypass -File scripts/uninstall-tray-startup-windows.ps1"
   },

@@ -1,7 +1,6 @@
-' Launch the Piper TTS tray with NO console window (seamless background start).
-' wscript.exe is a GUI-subsystem host (no console), and WshShell.Run(..., 0, False)
-' starts node hidden - so there's no CMD flash, unlike a .bat launcher.
+' Old name of start-voicedock-tray.vbs (the tray was "Piper TTS Tray" up to
+' VoiceDock 1.1). Kept so an old "Piper TTS Tray" startup shortcut still works;
+' the tray replaces that shortcut with "VoiceDock Tray" when it starts.
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh  = CreateObject("WScript.Shell")
-trayJs = fso.BuildPath(fso.GetParentFolderName(WScript.ScriptFullName), "..\tray\piper-tray.js")
-sh.Run "node """ & trayJs & """", 0, False
+sh.Run "wscript """ & fso.BuildPath(fso.GetParentFolderName(WScript.ScriptFullName), "start-voicedock-tray.vbs") & """", 0, False

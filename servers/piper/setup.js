@@ -1,4 +1,4 @@
-// One-step, cross-platform setup for the local Piper server + tray.
+// One-step, cross-platform setup for the local Piper server and the VoiceDock tray.
 //
 //   node setup.js          (or: npm run setup)
 //
@@ -21,7 +21,7 @@ const { execFileSync, spawn } = require('child_process');
 const SERVER_DIR = __dirname; // setup.js lives in servers/piper/
 const PIPER_DIR = path.join(SERVER_DIR, 'piper');
 const VOICES_DIR = path.join(PIPER_DIR, 'voices');
-const TRAY = path.join(SERVER_DIR, 'tray', 'piper-tray.js');
+const TRAY = path.join(SERVER_DIR, 'tray', 'voicedock-tray.js');
 
 const isWin = process.platform === 'win32';
 const isMac = process.platform === 'darwin';
@@ -106,7 +106,7 @@ async function installVoice(v) {
 }
 
 async function main() {
-  log(`Piper TTS setup (${process.platform}/${process.arch})\n`);
+  log(`VoiceDock Piper setup (${process.platform}/${process.arch})\n`);
   fs.mkdirSync(VOICES_DIR, { recursive: true });
 
   log('• Installing server dependencies…');
@@ -120,7 +120,7 @@ async function main() {
   spawn(process.execPath, [TRAY], { cwd: SERVER_DIR, detached: true, stdio: 'ignore', windowsHide: true }).unref();
 
   log('\n✓ Setup complete.');
-  log('  The Piper tray is running (look for the icon - green dot = server up).');
+  log('  The VoiceDock tray is running (look for the icon: a green dot means Piper is up).');
   log('  It auto-starts the server, set up launch-at-login, and shows status.');
   log('  Add or remove voices anytime from the Chrome extension’s Settings → Voices.');
 }
