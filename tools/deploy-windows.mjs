@@ -1,5 +1,5 @@
 // Deploy the built extension from this WSL repo to the Windows project folder
-// that Chrome loads unpacked. Only extension/ is synced — it's the only thing
+// that Chrome loads unpacked. Only extension/ is synced - it's the only thing
 // that changes and the only thing Chrome reads. The servers/piper folder on
 // Windows (with its downloaded piper.exe + .onnx voices, which are gitignored
 // and live only there) is intentionally left untouched.

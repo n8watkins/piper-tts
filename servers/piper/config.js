@@ -1,7 +1,7 @@
 // Single source of truth for the local server's host/port.
 //
 // Both server.js and the tray import this so a PORT/HOST override can't make
-// them disagree — previously the tray hardcoded 7477 while server.js honoured
+// them disagree - previously the tray hardcoded 7477 while server.js honoured
 // process.env.PORT, so any override left the tray probing the wrong port and
 // permanently reporting "offline".
 const PORT = Number(process.env.PORT || 7477);

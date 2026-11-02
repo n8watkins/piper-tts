@@ -138,6 +138,10 @@ const chromeShim = `
   }
 
   window.chrome = {
+    // The default shortcuts from manifest.json, as Chrome reports them.
+    commands: {
+      getAll: () => Promise.resolve(${JSON.stringify(Object.entries(manifest.commands || {}).map(([name, c]) => ({ name, description: c.description, shortcut: c.suggested_key?.default || '' })))}),
+    },
     runtime: {
       lastError: null,
       getManifest: () => ({ version: '${manifest.version}', name: 'VoiceDock' }),
@@ -254,7 +258,9 @@ $args = @(
   "--user-data-dir=$profile",
   "--no-first-run",
   "--no-default-browser-check",
-  "--window-size=1240,900"
+  "--window-size=1240,900",
+  "--headless=new",
+  "--hide-scrollbars"
 );
 Start-Process -FilePath $chrome -ArgumentList $args;
 `;

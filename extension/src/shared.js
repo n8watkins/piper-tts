@@ -13,21 +13,21 @@ export const ENGINES = {
     label: 'Piper',
     baseUrl: 'http://127.0.0.1:7477',
     local: true,
-    blurb: 'Fast local voices (Node.js server on port 7477).',
+    blurb: 'The light default: fast local voices, about 20 MB of RAM when idle (Node.js server on port 7477).',
   },
   kokoro: {
     id: 'kokoro',
     label: 'Kokoro',
     baseUrl: 'http://127.0.0.1:7478',
     local: true,
-    blurb: 'More natural local voices in 9 languages (Python server on port 7478).',
+    blurb: 'Optional: more natural voices in 9 languages, for a 338 MB one-time download and about 300-700 MB of RAM while its model is loaded (it is released after 10 idle minutes). Needs Python, in WSL on Windows (port 7478).',
   },
   browser: {
     id: 'browser',
     label: 'Browser voice',
     baseUrl: null,
     local: false,
-    blurb: "Chrome's built-in voice. Always available.",
+    blurb: "Chrome's built-in voice: no setup, always available, and the fallback when an engine is offline.",
   },
 };
 export const ENGINE_IDS = ['piper', 'kokoro', 'browser'];
