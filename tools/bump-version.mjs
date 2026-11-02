@@ -1,6 +1,6 @@
 // Bump the Chrome extension version across the three files that must stay in
 // lockstep: package.json, extension/manifest.json, and package-lock.json.
-// The local-piper-server is versioned independently and is left alone.
+// The servers/ are versioned independently and is left alone.
 //
 //   node tools/bump-version.mjs [patch|minor|major] [--dry]
 //

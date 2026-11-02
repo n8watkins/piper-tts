@@ -4,15 +4,15 @@ npm-debug.log*
 yarn-error.log*
 
 # Piper binaries (download separately — see README)
-local-piper-server/piper/piper.exe
-local-piper-server/piper/piper
-local-piper-server/piper/voices/*.onnx
-local-piper-server/piper/voices/*.onnx.json
+servers/piper/piper/piper.exe
+servers/piper/piper/piper
+servers/piper/piper/voices/*.onnx
+servers/piper/piper/voices/*.onnx.json
 
 # Generated audio output
-local-piper-server/output/*.wav
-local-piper-server/output/*.mp3
-local-piper-server/logs/
+servers/piper/output/*.wav
+servers/piper/output/*.mp3
+servers/piper/logs/
 
 # Environment variables
 .env

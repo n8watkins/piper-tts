@@ -57,7 +57,7 @@ piper-tts/
 │   ├── options.html/.css   Full settings page shell + styles
 │   └── icons/
 │
-└── local-piper-server/     Local Node.js server that calls Piper
+└── servers/piper/     Local Node.js server that calls Piper
     ├── server.js
     ├── package.json
     ├── piper/
@@ -89,7 +89,7 @@ alone. Reload at `chrome://extensions` afterward to pick up the changes.
 Bumping the version keeps `extension/manifest.json`, `package.json`, and
 `package-lock.json` in lockstep (the value Chrome shows for the loaded
 extension). Add `--dry` to preview without writing:
-`node tools/bump-version.mjs minor --dry`. The `local-piper-server` is versioned
+`node tools/bump-version.mjs minor --dry`. The `servers/piper` server is versioned
 independently and is not touched.
 
 The committed `extension/dist` bundles must always match `extension/src`. A
@@ -139,7 +139,7 @@ npm run build
 
 ### Quick setup (one command)
 
-Instead of steps 3–6 below, from `local-piper-server/` run:
+Instead of steps 3–6 below, from `servers/piper/` run:
 
 ```bash
 npm run setup
@@ -162,18 +162,18 @@ Piper is a fast, offline text-to-speech engine. Download the build for your OS:
 3. Extract it — you'll get a folder containing the Piper executable and support files
 4. Copy **all** the extracted files into:
    ```
-   local-piper-server/piper/
+   servers/piper/piper/
    ```
 
 On Windows, your folder should look like:
 ```
-local-piper-server/piper/
+servers/piper/piper/
 ├── piper.exe
 ├── espeak-ng-data/     (comes with the Piper archive)
 └── ...other DLLs
 ```
 
-On macOS/Linux, the executable is usually named `piper`. Put it at `local-piper-server/piper/piper`, or set `PIPER_BIN` to the executable path when starting the server.
+On macOS/Linux, the executable is usually named `piper`. Put it at `servers/piper/piper/piper`, or set `PIPER_BIN` to the executable path when starting the server.
 
 ---
 
@@ -188,7 +188,7 @@ Piper uses `.onnx` voice model files. Each voice has two files: a `.onnx` model 
    - `en_US-ryan-high.onnx.json`
 4. Place both files in:
    ```
-   local-piper-server/piper/voices/
+   servers/piper/piper/voices/
    ```
 
 You can download multiple voices and switch between them in the extension's Settings page.
@@ -200,7 +200,7 @@ You can download multiple voices and switch between them in the extension's Sett
    - `voice-name.onnx.json`
 2. Put both files in:
    ```
-   local-piper-server/piper/voices/
+   servers/piper/piper/voices/
    ```
 3. Start or restart the local server with `npm start`.
 4. Open the extension Settings page and go to **Voices**.
@@ -215,7 +215,7 @@ The **Open folder** button in the Voices tab opens the exact folder where voice 
 Standard start:
 
 ```bash
-cd local-piper-server
+cd servers/piper
 npm install        # first time only; npm ci also works because package-lock.json is committed
 npm start
 ```
@@ -224,34 +224,34 @@ Platform launch helpers are also included:
 
 ```bash
 # macOS/Linux
-cd local-piper-server
+cd servers/piper
 npm run start:unix
 ```
 
 ```powershell
 # Windows PowerShell
-cd local-piper-server
+cd servers/piper
 npm run start:windows
 ```
 
 Windows hidden/background start:
 
 ```powershell
-cd local-piper-server
+cd servers/piper
 npm run start:windows:bg
 ```
 
 Stop the hidden Windows server:
 
 ```powershell
-cd local-piper-server
+cd servers/piper
 npm run stop:windows:bg
 ```
 
 Minimal Windows tray:
 
 ```powershell
-cd local-piper-server
+cd servers/piper
 npm run start:windows:tray
 ```
 
@@ -260,7 +260,7 @@ The tray uses the Piper icon and a plain Windows menu: status, Start Server, Sto
 Install or remove Windows sign-in startup:
 
 ```powershell
-cd local-piper-server
+cd servers/piper
 npm run install:windows:tray
 npm run uninstall:windows:tray
 ```
@@ -352,7 +352,7 @@ background.js (service worker)
        ↓                              ↓
  offscreen.js                    chrome.tts.speak()
        ↓
- POST /tts → local-piper-server
+ POST /tts → servers/piper
        ↓
  Piper executable → WAV audio
        ↓
@@ -369,7 +369,7 @@ Chrome Manifest V3 service workers cannot play audio directly, so Piper audio pl
 → Make sure the extension is loaded and enabled at `chrome://extensions`.
 
 **Popup shows "Piper Offline"**  
-→ Run `npm start` inside `local-piper-server/`. Check that port 7477 is not blocked.
+→ Run `npm start` inside `servers/piper/`. Check that port 7477 is not blocked.
 
 **No audio / silent playback**  
 → Open Chrome DevTools (F12 → Console) and look for errors. Common causes: no voice model downloaded, wrong voice filename, Piper executable not found.
@@ -406,11 +406,11 @@ Chrome Manifest V3 service workers cannot play audio directly, so Piper audio pl
 **Windows tray helper**
 This is useful for Windows users who do not want to keep a terminal open. The repo includes:
 
-- `local-piper-server/scripts/start-background-windows.ps1`
-- `local-piper-server/scripts/stop-background-windows.ps1`
-- `local-piper-server/scripts/start-background-windows.bat`
-- `local-piper-server/scripts/piper-tray-windows.ps1`
-- `local-piper-server/scripts/start-piper-tray-windows.bat`
+- `servers/piper/scripts/start-background-windows.ps1`
+- `servers/piper/scripts/stop-background-windows.ps1`
+- `servers/piper/scripts/start-background-windows.bat`
+- `servers/piper/scripts/piper-tray-windows.ps1`
+- `servers/piper/scripts/start-piper-tray-windows.bat`
 
 The tray intentionally uses the default Windows menu and only exposes status, Start Server, Stop Server, Open Voices Folder, and Exit. It also starts the server automatically when the tray launches. It still needs runtime verification on a real Windows machine.
 

@@ -23,8 +23,8 @@ fi
 
 if [ ! -x "$PIPER_BIN" ]; then
   echo "Piper executable is not runnable: $PIPER_BIN" >&2
-  echo "Download Piper, place it at local-piper-server/piper/piper, then run:" >&2
-  echo "  chmod +x local-piper-server/piper/piper" >&2
+  echo "Download Piper, place it at servers/piper/piper/piper, then run:" >&2
+  echo "  chmod +x servers/piper/piper/piper" >&2
   echo "Or start with PIPER_BIN=/path/to/piper $0" >&2
   exit 1
 fi

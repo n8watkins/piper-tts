@@ -18,7 +18,7 @@ const path = require('path');
 const https = require('https');
 const { execFileSync, spawn } = require('child_process');
 
-const SERVER_DIR = __dirname; // setup.js lives in local-piper-server/
+const SERVER_DIR = __dirname; // setup.js lives in servers/piper/
 const PIPER_DIR = path.join(SERVER_DIR, 'piper');
 const VOICES_DIR = path.join(PIPER_DIR, 'voices');
 const TRAY = path.join(SERVER_DIR, 'tray', 'piper-tray.js');

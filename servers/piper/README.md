@@ -11,7 +11,7 @@ Runs on `http://127.0.0.1:7477` — localhost only, never exposed publicly. Brow
 ### 1. Install Node dependencies
 
 ```bash
-cd local-piper-server
+cd servers/piper
 npm install
 # or, for a lockfile-exact install:
 npm ci
@@ -26,7 +26,7 @@ Go to [github.com/rhasspy/piper/releases](https://github.com/rhasspy/piper/relea
 Extract it and place the executable here:
 
 ```
-local-piper-server/
+servers/piper/
   piper/
     piper.exe       ← Windows
     piper           ← macOS/Linux
@@ -45,7 +45,7 @@ From [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-
 Place both files here:
 
 ```
-local-piper-server/
+servers/piper/
   piper/
     voices/
       en_US-ryan-high.onnx       ← voice model
@@ -82,7 +82,7 @@ npm run start:windows:bg
 npm run stop:windows:bg
 ```
 
-The background wrapper is intentionally small: single instance guard, PID files, and logs in `local-piper-server/logs/`. A tray host can call `scripts/start-background-windows.ps1` and `scripts/stop-background-windows.ps1` instead of embedding server logic.
+The background wrapper is intentionally small: single instance guard, PID files, and logs in `servers/piper/logs/`. A tray host can call `scripts/start-background-windows.ps1` and `scripts/stop-background-windows.ps1` instead of embedding server logic.
 
 Minimal Windows tray:
 

@@ -76,7 +76,7 @@ const chromeShim = `
         return new Response(JSON.stringify({
           voices,
           sizes: voiceSizes,
-          voiceDir: 'C:\\\\Users\\\\${windowsUser}\\\\Projects\\\\Tools\\\\piper-tts\\\\local-piper-server\\\\piper\\\\voices',
+          voiceDir: 'C:\\\\Users\\\\${windowsUser}\\\\Projects\\\\Tools\\\\piper-tts\\\\servers\\\\piper\\\\piper\\\\voices',
         }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
