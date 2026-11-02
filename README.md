@@ -5,10 +5,14 @@ Highlight text on any webpage, right-click it (or press `Alt+Shift+R`), and hear
 
 VoiceDock has two local engines, chosen per profile:
 
-- **[Piper](https://github.com/rhasspy/piper)**: fast and light, with downloadable English voices (Node.js server on port 7477).
-- **[Kokoro](https://huggingface.co/hexgrad/Kokoro-82M)**: more natural, 54 voices in 9 languages, slightly slower (Python server on port 7478).
+- **[Piper](https://github.com/rhasspy/piper)**, the light default: fast, with downloadable English voices (Node.js server on port 7477).
+  It idles at about 20 MB of RAM and loads a voice (60-150 MB) only while it reads.
+- **[Kokoro](https://huggingface.co/hexgrad/Kokoro-82M)**, optional: more natural, 54 voices in 9 languages, slightly slower (Python server on port 7478).
+  It costs a 338 MB one-time download and about 300-700 MB of RAM while its model is loaded; the model loads on the first read and is released after 10 idle minutes, leaving about 45 MB.
+  It needs Python, which on Windows means WSL.
 
-The browser's built-in voice is a third choice and the automatic fallback when an engine is offline, so the extension works instantly with no server at all.
+The browser's built-in voice is the zero-setup choice and the automatic fallback when an engine is offline, so the extension works instantly with no server at all.
+Set up Piper for natural local voices, and add Kokoro only if you want its voices and have the memory to spare.
 
 > VoiceDock was called **Piper TTS** up to version 1.0.17.
 > The GitHub repo was `n8watkins/piper-tts` (the old URL redirects), and settings saved by Piper TTS carry over automatically.
@@ -117,6 +121,8 @@ The built React bundles are committed under `extension/dist/`, so no build step 
 ### Step 3 - Set up an engine
 
 Set up whichever engines you want; profiles that use an engine that isn't running fall back to the browser voice.
+Start with Piper: it is light and quick to install.
+Kokoro is optional (see [Kokoro server](#kokoro-server) for what it costs).
 
 #### Piper server
 
@@ -163,14 +169,20 @@ If another Piper server is already running, the tray shows it as external and wo
 To add voices later, put each `.onnx` and `.onnx.json` pair in `servers/piper/piper/voices/` (the **Open folder** button on the Voices tab opens it), then restart the server.
 Test, star, or delete voices from **Settings → Voices → Piper**.
 
-#### Kokoro server
+#### Kokoro server (optional)
 
-Kokoro runs in Linux or WSL (Python 3.10 or newer).
+Kokoro is optional.
+Skip it if Piper's voices are good enough for you or memory is tight:
+
+- **Download:** 338 MB, once (the model and its voices), plus the Python packages.
+- **Memory:** about 300-700 MB of RAM while the model is loaded (more while speaking), and about 45 MB when idle: the model loads on the first read (adding 1-3 s to it) and is released after 10 idle minutes (`KOKORO_IDLE_UNLOAD_SECONDS`).
+- **Needs:** Python 3.10 or newer on Linux, or WSL on Windows (the WSL VM itself uses memory too).
+
 WSL2 mirrors `localhost` to Windows, so Chrome on Windows reaches it at `127.0.0.1:7478`.
 
 ```bash
 cd servers/kokoro
-./setup.sh            # venv + kokoro-onnx + the Kokoro-82M model (about 340 MB)
+./setup.sh            # venv + kokoro-onnx + the Kokoro-82M model (338 MB)
 ./install-service.sh  # systemd user service: starts at login, restarts on crash
 ```
 
@@ -220,6 +232,9 @@ Switch profiles with the `‹` / `›` arrows in the popup, or use **Read as…*
 
 | | Browser voice | Piper | Kokoro |
 | --- | --- | --- | --- |
+| Setup | None | `npm run setup` (Node.js) | Optional: Python, WSL on Windows |
+| Download | None | Piper plus about 60-120 MB per voice | 338 MB, once |
+| RAM | None extra | About 20 MB idle, plus 60-150 MB while reading | About 45 MB idle, 300-700 MB while the model is loaded |
 | Needs a local server | No | Yes (port 7477) | Yes (port 7478) |
 | Sends text to a hosted API | No | No | No |
 | Voices | Your OS voices | Downloaded `.onnx` voices (8 installed here) | 54 built-in voices, 9 languages |

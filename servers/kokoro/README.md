@@ -3,6 +3,13 @@
 A small local [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) text-to-speech server backed by [`kokoro-onnx`](https://github.com/thewh1teagle/kokoro-onnx).
 It is one of the two VoiceDock engines: the extension can read with Piper (`servers/piper`, port 7477) or Kokoro (this server, port 7478), chosen per profile.
 
+**Kokoro is optional.**
+Piper is the light default and the browser voice is the zero-setup fallback, so set Kokoro up only if you want its voices:
+
+- **Download:** 338 MB, once (`kokoro-v1.0.onnx` 310 MB and `voices-v1.0.bin` 27 MB), plus the Python packages.
+- **Memory:** about 300-700 MB of RAM while the model is loaded, and about 45 MB once it is released after 10 idle minutes (see [Memory](#memory-the-model-loads-on-demand)).
+- **Needs:** Python 3.10 or newer on Linux, or WSL on Windows.
+
 Kokoro sounds more natural than Piper and ships 54 voices in 9 languages, at a small latency cost (about 1.5 s warm for one sentence versus 1.15 s for Piper).
 
 It speaks the shared VoiceDock API described in [`docs/API.md`](../../docs/API.md).
@@ -44,7 +51,7 @@ Errors are JSON `{"error": "...", "details": "..."}` with a 4xx or 5xx status.
 ./setup.sh
 ```
 
-Creates a `.venv`, installs `kokoro-onnx`, and downloads the Kokoro-82M v1.0 model (`kokoro-v1.0.onnx`, about 310 MB) and voices (`voices-v1.0.bin`, about 27 MB) into `./models`.
+Creates a `.venv`, installs `kokoro-onnx`, and downloads the Kokoro-82M v1.0 model (`kokoro-v1.0.onnx`, about 310 MB) and voices (`voices-v1.0.bin`, about 27 MB), 338 MB in all, into `./models`.
 It is idempotent.
 
 ## Run

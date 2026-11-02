@@ -73,7 +73,7 @@ const ENGINE_SETUP = {
   kokoro: {
     folder: 'servers/kokoro/',
     command: './setup.sh && ./install-service.sh',
-    what: 'in WSL or Linux to download the Kokoro model and run it as a service.',
+    what: 'in WSL or Linux to download the Kokoro model (338 MB, once) and run it as a service.',
     anchor: 'kokoro-server',
   },
 };
@@ -857,7 +857,7 @@ function OptionsApp() {
               <li><span className="flow-step">1</span><div><strong>Highlight text</strong> on any webpage and right-click → <em>Read selected text aloud</em>.</div></li>
               <li><span className="flow-step">2</span><div>The extension's <strong>background service worker</strong> checks that the active profile's engine is reachable: <strong>Piper</strong> at <code>http://127.0.0.1:7477</code> or <strong>Kokoro</strong> at <code>http://127.0.0.1:7478</code>.</div></li>
               <li><span className="flow-step">3</span><div>The text is split into sentence chunks and sent to that <strong>local server</strong> (Node.js running <code>piper.exe</code>, or Python running Kokoro-82M), which sends back WAV audio.</div></li>
-              <li><span className="flow-step">4</span><div>An <strong>offscreen document</strong> receives each chunk and plays it through the Web Audio API — Chrome's Manifest V3 service workers can't play audio directly.</div></li>
+              <li><span className="flow-step">4</span><div>An <strong>offscreen document</strong> receives each chunk and plays it through the Web Audio API - Chrome's Manifest V3 service workers can't play audio directly.</div></li>
               <li><span className="flow-step">5</span><div>If the engine is offline or generation fails and <em>Browser voice fallback</em> is on (Settings), the browser's built-in voice is used instead, and the page shows a short note saying so.</div></li>
               <li><span className="flow-step">6</span><div>Use <strong>keyboard shortcuts</strong> across tabs: <kbd>Alt+Shift+R</kbd> to read selected text or stop playback, and <kbd>Alt+Shift+D</kbd> to pause/resume.</div></li>
             </ol>
