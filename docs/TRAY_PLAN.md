@@ -17,7 +17,7 @@ The tray should answer "can VoiceDock read right now, and with which engines?" a
 | Piece | Where | Notes |
 | --- | --- | --- |
 | N8 Tray | `C:\Users\natha\scripts\n8tray\n8tray.ps1` (0.10.0) | Built-in panels per module; module list in `n8tray\config\settings.json`. |
-| n8piper | `C:\Users\natha\scripts\n8piper` | `modular.json` id `piper-tts`; `piper-tts.ps1` wrapper; `config\settings.json` has `server.path`, `port`, `host`. Adopts an already-healthy server, starts `server.js` with a named Node copy (`piper-tts-server.exe`), writes a pid file, and only ever stops its own server. Health: `GET /health`, 300 ms. |
+| n8piper | `C:\Users\natha\scripts\n8tray\n8piper` | `modular.json` id `piper-tts`; `piper-tts.ps1` wrapper; `config\settings.json` has `server.path`, `port`, `host`. Adopts an already-healthy server, starts `server.js` with a named Node copy (`piper-tts-server.exe`), writes a pid file, and only ever stops its own server. Health: `GET /health`, 300 ms. |
 | Piper server | `C:\Users\natha\Projects\Tools\piper-tts\local-piper-server` | Moves to `...\voicedock\servers\piper` with `UPDATE_WINDOWS_SERVER.md`. |
 | Kokoro server | WSL `Ubuntu-24.04`, `~/projects/extensions/kokoro-tts` (moving to `servers/kokoro`) | systemd user unit `kokoro-tts`, enabled with lingering, `Restart=always`. Uses about 610 MB of RAM once loaded. Reachable from Windows at `127.0.0.1:7478` through WSL localhost mirroring. |
 

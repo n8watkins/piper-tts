@@ -8,7 +8,7 @@ Nothing here has been done for you: the running server was deliberately left alo
 | What | Where |
 | --- | --- |
 | Piper server code | `C:\Users\natha\Projects\Tools\piper-tts\local-piper-server\server.js` |
-| How it starts | N8 Tray module `piper-tts` → `C:\Users\natha\scripts\n8piper\piper-tts.ps1`, which reads `server.path` from `C:\Users\natha\scripts\n8piper\config\settings.json` and runs `server.js` with a named Node copy, `piper-tts-server.exe` |
+| How it starts | N8 Tray module `piper-tts` → `C:\Users\natha\scripts\n8tray\n8piper\piper-tts.ps1`, which reads `server.path` from `C:\Users\natha\scripts\n8tray\n8piper\config\settings.json` and runs `server.js` with a named Node copy, `piper-tts-server.exe` |
 | Last start | 2026-11-01 18:25, pid 29700, on `http://127.0.0.1:7477` (`/health` answers `{"status":"ok","version":"1.0.0"}`) |
 | Piper binary and voices | `...\local-piper-server\piper\` (`piper.exe`, DLLs, `espeak-ng-data\`, 8 voices in `voices\`); gitignored, they exist only there |
 | Chrome extension | Loaded unpacked from `C:\Users\natha\Projects\Tools\piper-tts\extension` (extension id `djhkchiohpmmgcjlliakdkbllhfbefmg`), version 1.0.17 |
@@ -92,7 +92,7 @@ Run these in PowerShell unless they say WSL.
    Confirm it is down: `Invoke-RestMethod http://127.0.0.1:7477/health` should now fail.
 
 6. **Point n8piper at the new folder.**
-   Edit `C:\Users\natha\scripts\n8piper\config\settings.json` (a settings file, not n8piper's code) and change `server.path`:
+   Edit `C:\Users\natha\scripts\n8tray\n8piper\config\settings.json` (a settings file, not n8piper's code) and change `server.path`:
 
    ```json
    {
@@ -129,7 +129,7 @@ Run these in PowerShell unless they say WSL.
 ## Rollback
 
 1. Stop the **Piper TTS** module in N8 Tray.
-2. Set `server.path` in `C:\Users\natha\scripts\n8piper\config\settings.json` back to `C:\\Users\\natha\\Projects\\Tools\\piper-tts\\local-piper-server`.
+2. Set `server.path` in `C:\Users\natha\scripts\n8tray\n8piper\config\settings.json` back to `C:\\Users\\natha\\Projects\\Tools\\piper-tts\\local-piper-server`.
 3. Start the module again.
 
 The old folder is untouched by the steps above, so this always works.

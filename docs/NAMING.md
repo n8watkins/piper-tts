@@ -54,7 +54,7 @@ Do these together, in this order, so links never break for long.
    The new version adds the `http://127.0.0.1:7478/*` host permission; it is the same host as the existing 7477 permission, so Chrome shouldn't show a new permission warning, but check the dashboard's permission preview before publishing.
 4. **N8 Tray module**: `n8piper` → `n8voice` (or a name matching the new product).
    That is a new module rather than a rename; see `docs/TRAY_PLAN.md`.
-   Touches `C:\Users\natha\scripts\n8piper` (folder, `modular.json` id `piper-tts`, the `N8PiperTts_SingleInstance` mutex, the `piper-tts-server.exe` named Node copy) and the `piper-tts` entry in `C:\Users\natha\scripts\n8tray\config\settings.json`.
+   Touches `C:\Users\natha\scripts\n8tray\n8piper` (folder, `modular.json` id `piper-tts`, the `N8PiperTts_SingleInstance` mutex, the `piper-tts-server.exe` named Node copy) and the `piper-tts` entry in `C:\Users\natha\scripts\n8tray\config\settings.json`.
 5. **Windows folders**: Chrome loads the unpacked extension from `C:\Users\natha\Projects\Tools\piper-tts\extension`.
    An unpacked extension's ID comes from its folder path, so renaming that folder resets the locally loaded extension's settings.
    Leave it, or re-create profiles after moving it (the store version is unaffected).
