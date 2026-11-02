@@ -12,6 +12,7 @@
     "version:major": "node tools/bump-version.mjs major",
     "deploy": "node tools/deploy-windows.mjs",
     "screenshots": "node tools/capture-screenshots.mjs",
+    "memory-report": "node tools/memory-report.mjs",
     "release": "release-kit release",
     "release:check": "release-kit check && npm ci --prefix servers/piper && npm test && npm run build",
     "test:kokoro": "python3 -m unittest discover -s servers/kokoro/tests"

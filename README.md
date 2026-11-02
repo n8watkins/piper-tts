@@ -73,6 +73,9 @@ npm test                       # extension + Piper server tests (node --test) an
 npm run deploy                 # copy the built extension/ to the Windows folder Chrome loads
 ```
 
+`npm run memory-report -- <csv dir>` builds the memory report (one self-contained HTML file with 24-hour and 7-day timelines per engine) from the memory CSV files the trays record; add `--open` to open it.
+See [Memory history and reports](#memory-history-and-reports).
+
 `npm run deploy` mirrors `extension/` into the Windows folder that Chrome loads unpacked.
 It looks for `…/Projects/Tools/piper-tts`, then `…/voicedock`, then `…/local-tts-reader`; override with `VOICEDOCK_WINDOWS_DIR`.
 An unpacked extension's ID, and so its saved settings, depends on its folder path, so keep Chrome on the folder it already loads.
@@ -247,6 +250,30 @@ background.js: which engine does the active profile use?
 
 Manifest V3 service workers can't play audio, so engine audio is played by an **offscreen document**, a hidden page that can use `new Audio()`.
 Both servers implement the same small API, documented in [docs/API.md](docs/API.md).
+
+---
+
+## Memory history and reports
+
+Both engine servers report their own memory in `GET /health` (see [docs/API.md](docs/API.md#get-health)), and nothing there loads a model.
+A tray can record those numbers once a minute into CSV files, one per day:
+
+```
+timestamp,engine,rss_mb,model_loaded,event,detail
+2026-11-02T18:05:12Z,kokoro,581.2,yes,load,
+2026-11-02T18:05:19Z,kokoro,581.2,yes,speak,af_heart
+2026-11-02T18:06:00Z,kokoro,583.0,yes,sample,
+```
+
+`event` is `sample`, `load`, `unload`, `speak`, `start`, `restart` or `offline`, and `engine` is `piper`, `kokoro` or `wsl` (the WSL VM, where a tray can read it without waking WSL).
+Build the report from a folder of these files with:
+
+```bash
+npm run memory-report -- /mnt/c/Users/<you>/AppData/Roaming/VoiceDock/memory --open
+```
+
+It writes `memory-report.html` into that folder: a timeline per engine for the last 24 hours and 7 days with model loads, releases, reads and restarts marked, plus peak, average and idle memory.
+The file is self-contained (inline SVG, no network), so it can be kept or shared as is.
 
 ---
 
