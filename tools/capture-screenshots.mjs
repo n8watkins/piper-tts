@@ -357,7 +357,7 @@ async function screenshotOptions(page, name) {
       const page = await browser.newPage();
       await page.setViewport({ width: 620, height: 900, deviceScaleFactor: 2 });
       await openUiPage(page, baseUrl + '/options.html');
-      await page.waitForFunction(() => document.body.textContent.includes('Piper TTS'), { timeout: 5_000 });
+      await page.waitForFunction(() => document.body.textContent.includes(${JSON.stringify(manifest.name)}), { timeout: 5_000 });
       await clickTab(page, tab.label);
       await page.waitForFunction((text) => document.body.textContent.includes(text), { timeout: 5_000 }, tab.waitFor);
       await new Promise((resolve) => setTimeout(resolve, 350));
@@ -368,7 +368,7 @@ async function screenshotOptions(page, name) {
     const popup = await browser.newPage();
     await popup.setViewport({ width: 300, height: 520, deviceScaleFactor: 2 });
     await openUiPage(popup, baseUrl + '/popup.html');
-    await popup.waitForFunction(() => document.body.textContent.includes('Piper TTS'), { timeout: 5_000 });
+    await popup.waitForFunction(() => document.body.textContent.includes(${JSON.stringify(manifest.name)}), { timeout: 5_000 });
     await new Promise((resolve) => setTimeout(resolve, 350));
     await screenshotMeasured(popup, outputDir + '/popup.png', 'body', 300, 240, 0);
     await popup.close();
