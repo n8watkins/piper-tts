@@ -26,7 +26,13 @@ The extension expects the defaults.
 `200` when the server is up and ready to synthesize (Kokoro may still need to load its model on the next `/tts`).
 
 ```json
-{ "status": "ok", "engine": "piper", "version": "1.0.0" }
+{
+  "status": "ok", "engine": "piper", "version": "1.0.0", "pid": 5120,
+  "startedAt": "2026-11-02T18:00:00Z", "rssMb": 22.4, "totalRssMb": 108.6,
+  "speaking": true, "readers": [{ "pid": 7788, "voice": "en_US-ryan-high.onnx", "rssMb": 86.2 }],
+  "readerRssMb": 86.2, "activeVoice": "en_US-ryan-high.onnx",
+  "lastVoice": "en_US-ryan-high.onnx", "lastSpeakAt": "2026-11-02T18:05:19Z", "lastReaderPeakRssMb": 91.0
+}
 ```
 
 ```json
@@ -44,16 +50,22 @@ The extension expects the defaults.
 | `status` | `"ok"` | Always `"ok"` on `200`. |
 | `engine` | `"piper"` or `"kokoro"` | Which engine answered. |
 | `version` | string | The server's own version (the servers are versioned separately from the extension). |
+| `pid`, `startedAt` | number, ISO 8601 UTC string | The server's process id and when it started. |
+| `rssMb` | number or null | The server process's resident memory in MB. For Piper this is the Node server alone; for Kokoro it includes the model when loaded (null where the OS doesn't expose it cheaply; Linux and WSL do). |
+| `speaking` | boolean | A `/tts` request is being synthesized right now. |
+| `lastSpeakAt` | ISO 8601 UTC string or null | When the last `/tts` synthesis started (`null`: none since start). |
 | `voices` | number | Kokoro only: how many voices are available. |
 | `modelLoaded` | boolean | Kokoro only: whether the model is in memory right now. `false` is normal: the model loads on the first `/tts` request (adding 1-3 s to it) and is released after an idle period. Checking `/health` never loads it. |
-| `speaking` | boolean | Kokoro only: a `/tts` request is being synthesized right now. |
-| `rssMb` | number or null | Kokoro only: the server process's resident memory in MB (null where the OS doesn't expose it cheaply; Linux and WSL do). |
-| `pid` | number | Kokoro only: the server's process id. |
-| `startedAt`, `modelLoadedAt`, `modelUnloadedAt`, `lastSpeakAt` | ISO 8601 UTC string or null | Kokoro only: when the server started, when the model was last loaded and released, and when the last `/tts` started. `null` means "not since start". |
+| `modelLoadedAt`, `modelUnloadedAt` | ISO 8601 UTC string or null | Kokoro only: when the model was last loaded and released (`null`: not since start). |
 | `idleSeconds` | number | Kokoro only: seconds since the last `/tts` finished (since start if none; `0` while speaking). |
 | `idleUnloadSeconds` | number | Kokoro only: the configured idle period before the model is released (`0` = never). |
+| `readers` | array | Piper only: the `piper` processes reading right now, each `{ pid, voice, rssMb }`. Piper starts one per chunk; it loads the voice (60-150 MB) and exits when the chunk is done. `rssMb` is sampled in the background about once a second, so it is `null` for the first quarter second. |
+| `readerRssMb`, `totalRssMb` | number | Piper only: the readers' memory summed, and the server plus the readers. |
+| `activeVoice`, `lastVoice` | string or null | Piper only: the voice being read now (the newest reader), and the last voice read. |
+| `lastReaderPeakRssMb` | number or null | Piper only: the highest memory the last finished reader reached, so a short read still shows what it cost. |
 
 All of these are cheap to compute, so trays can poll `/health` for live memory without loading anything.
+Servers older than these fields answer with only `status`, `engine` and `version` (plus `voices` for Kokoro), so clients treat every other field as optional.
 
 Clients should treat any non-`200` response, a timeout (the extension uses 2.5 s), or a connection error as "offline".
 
@@ -130,7 +142,8 @@ Kokoro's voices live in a single bundled file, so it has no equivalents.
 
 ## Tests
 
-- `test/piper-server.test.mjs`: Piper routes, error shapes and the origin check (no `piper.exe` needed).
+- `test/piper-server.test.mjs`: Piper routes, error shapes, the origin check and the memory fields while a (fake) `piper` reads (no `piper.exe` needed).
+- `test/piper-memory.test.mjs`: Piper reader tracking and memory sampling.
 - `servers/kokoro/tests/test_server.py`: Kokoro routes, error shapes, the origin check and CORS, with a fake engine (no model needed).
 
 `npm test` runs both.

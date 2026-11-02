@@ -3,7 +3,7 @@
  *
  * Runs on http://127.0.0.1:7477 by default and speaks the shared VoiceDock
  * API (docs/API.md in the repo root):
- * GET  /health                  → { status, engine: "piper", version }
+ * GET  /health                  → { status, engine: "piper", version, rssMb, readers, ... }
  * GET  /voices                  → { engine, voices, defaultVoice, sizes, voiceDir }
  * POST /tts  { "text": "..." }  → audio/wav
  *
@@ -21,6 +21,7 @@ const path    = require("path");
 const crypto  = require("crypto");
 const { spawn } = require("child_process");
 const { version } = require("./package.json");
+const { serverRssMb, createReaderTracker } = require("./memory");
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const { PORT, HOST } = require("./config"); // shared with the tray so they agree
@@ -67,8 +68,24 @@ app.options("*", cors(corsOptions)); // explicit preflight for DELETE etc.
 app.use(express.json({ limit: "1mb" }));
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
+// Also reports memory, cheaply: the Node server's RSS plus the piper children
+// reading right now (sampled in the background, see memory.js).
+const readers = createReaderTracker();
+const startedAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", engine: "piper", version });
+  const memory = readers.snapshot();
+  const rssMb = serverRssMb();
+  res.json({
+    status: "ok",
+    engine: "piper",
+    version,
+    pid: process.pid,
+    startedAt,
+    rssMb,
+    totalRssMb: Math.round((rssMb + memory.readerRssMb) * 10) / 10,
+    ...memory,
+  });
 });
 
 // ─── Validation Helpers ───────────────────────────────────────────────────────
@@ -137,6 +154,7 @@ function runPiper({ text, outputPath, voiceModel }) {
     } catch (err) {
       return reject(new Error(`Failed to spawn Piper: ${err.message}`));
     }
+    readers.add(proc, voiceModel);
 
     // Feed text via stdin and close the pipe so Piper knows input is complete
     proc.stdin.write(text, "utf8");

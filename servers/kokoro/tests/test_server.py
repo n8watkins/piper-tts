@@ -352,6 +352,7 @@ class LazyEngineTests(unittest.TestCase):
         self.assertIsNone(status["modelUnloadedAt"])
         self.assertIsNone(status["lastSpeakAt"])
         self.assertEqual(status["idleUnloadSeconds"], 600)
+        self.assertIsInstance(status["idleUnloadSeconds"], int, "600, not 600.0")
         self.assertIsInstance(status["pid"], int)
 
         self.wall.now += 60
