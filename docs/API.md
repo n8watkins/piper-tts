@@ -23,14 +23,14 @@ The extension expects the defaults.
 
 ## `GET /health`
 
-`200` when the server is up and ready to synthesize.
+`200` when the server is up and ready to synthesize (Kokoro may still need to load its model on the next `/tts`).
 
 ```json
 { "status": "ok", "engine": "piper", "version": "1.0.0" }
 ```
 
 ```json
-{ "status": "ok", "engine": "kokoro", "version": "1.0.0", "voices": 54 }
+{ "status": "ok", "engine": "kokoro", "version": "1.0.0", "voices": 54, "modelLoaded": false }
 ```
 
 | Field | Type | Notes |
@@ -38,7 +38,8 @@ The extension expects the defaults.
 | `status` | `"ok"` | Always `"ok"` on `200`. |
 | `engine` | `"piper"` or `"kokoro"` | Which engine answered. |
 | `version` | string | The server's own version (the servers are versioned separately from the extension). |
-| `voices` | number | Kokoro only: how many voices are loaded. |
+| `voices` | number | Kokoro only: how many voices are available. |
+| `modelLoaded` | boolean | Kokoro only: whether the model is in memory right now. `false` is normal: the model loads on the first `/tts` request (adding 1-3 s to it) and is released after an idle period. Checking `/health` never loads it. |
 
 Clients should treat any non-`200` response, a timeout (the extension uses 2.5 s), or a connection error as "offline".
 

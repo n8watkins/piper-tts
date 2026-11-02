@@ -4,7 +4,8 @@
 It speaks the same HTTP API as the VoiceDock Piper server (see
 docs/API.md in the repo root):
 
-  GET  /health  -> {"status": "ok", "engine": "kokoro", "version": "...", "voices": 54}
+  GET  /health  -> {"status": "ok", "engine": "kokoro", "version": "...", "voices": 54,
+                    "modelLoaded": false}
   GET  /voices  -> {"engine": "kokoro", "voices": [...]}
   POST /tts     -> body {"text": "...", "voice": "af_heart", "speed": 1.0, "lang": "en-us"}
                    returns audio/wav (16-bit PCM, 24 kHz mono)
@@ -21,17 +22,28 @@ Origin policy (same as the Piper server): requests without an Origin header
 allowed; any other browser origin gets 403, so a random web page can't use the
 local engine.
 
+Memory: the model (about 300-700 MB of RAM while loaded) is loaded lazily on
+the first /tts request and released again after KOKORO_IDLE_UNLOAD_SECONDS
+without requests (default 600; 0 keeps it loaded once loaded). /health and
+/voices never load it: voice names are read from the voices file's index.
+
 Stdlib http.server only. kokoro-onnx and numpy are imported when the model is
 loaded, so this module (and its tests) import without them.
 """
 
 from __future__ import annotations
 
+import ctypes
+import ctypes.util
+import gc
 import io
 import json
 import os
 import sys
+import threading
+import time
 import wave
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, Protocol
@@ -46,6 +58,28 @@ PORT = int(os.environ.get("KOKORO_PORT", "7478"))
 MODELS_DIR = Path(os.environ.get("KOKORO_MODELS_DIR", Path(__file__).parent / "models"))
 MODEL_PATH = MODELS_DIR / "kokoro-v1.0.onnx"
 VOICES_PATH = MODELS_DIR / "voices-v1.0.bin"
+
+# Seconds without a /tts request before the model is released (0 = never).
+DEFAULT_IDLE_UNLOAD_SECONDS = 600.0
+
+
+def idle_unload_seconds_from_env(value: str | None) -> float:
+    """Parse KOKORO_IDLE_UNLOAD_SECONDS: unset or invalid -> default, negative -> 0."""
+    if value is None or not value.strip():
+        return DEFAULT_IDLE_UNLOAD_SECONDS
+    try:
+        seconds = float(value)
+    except ValueError:
+        print(
+            f"[kokoro] ignoring invalid KOKORO_IDLE_UNLOAD_SECONDS={value!r}, "
+            f"using {DEFAULT_IDLE_UNLOAD_SECONDS:g}",
+            flush=True,
+        )
+        return DEFAULT_IDLE_UNLOAD_SECONDS
+    return max(0.0, seconds)
+
+
+IDLE_UNLOAD_SECONDS = idle_unload_seconds_from_env(os.environ.get("KOKORO_IDLE_UNLOAD_SECONDS"))
 
 DEFAULT_VOICE = "af_heart"
 MAX_TEXT_CHARS = 4000
@@ -83,7 +117,11 @@ def is_allowed_origin(origin: str | None) -> bool:
 
 
 class Engine(Protocol):
-    """What the HTTP layer needs from a synthesizer; tests pass a fake."""
+    """What the HTTP layer needs from a synthesizer; tests pass a fake.
+
+    An engine may also define is_loaded() -> bool, reported by /health as
+    modelLoaded (engines without it are reported as loaded).
+    """
 
     def voices(self) -> list[str]: ...
 
@@ -105,25 +143,148 @@ def wav_bytes(samples, sample_rate: int = SAMPLE_RATE) -> bytes:
     return buf.getvalue()
 
 
-class KokoroEngine:
-    """Kokoro-82M loaded once at boot (~1-2 s) and reused for every request."""
+def read_voice_names(voices_path: Path) -> list[str]:
+    """Voice ids from a kokoro-onnx voices file without loading it.
 
-    def __init__(self, model_path: Path = MODEL_PATH, voices_path: Path = VOICES_PATH):
+    voices-v1.0.bin is a NumPy .npz archive: a zip with one `<voice>.npy`
+    member per voice, so the zip index alone lists the voices (a few KB read,
+    no numpy, no model).
+    """
+    with zipfile.ZipFile(voices_path) as archive:
+        return sorted(
+            name[: -len(".npy")] for name in archive.namelist() if name.endswith(".npy")
+        )
+
+
+def release_freed_memory() -> None:
+    """Ask glibc to return freed heap pages to the OS (no-op elsewhere).
+
+    Dropping the ONNX session frees its buffers, but glibc keeps most of them
+    in its arenas, so the process RSS barely moves without malloc_trim.
+    """
+    gc.collect()
+    libc_name = ctypes.util.find_library("c")
+    if not libc_name:
+        return
+    try:
+        trim = ctypes.CDLL(libc_name).malloc_trim
+    except (OSError, AttributeError):
+        return  # not glibc (musl, macOS): nothing to trim
+    trim(0)
+
+
+def load_kokoro(model_path: Path, voices_path: Path):
+    from kokoro_onnx import Kokoro
+
+    return Kokoro(str(model_path), str(voices_path))
+
+
+class KokoroEngine:
+    """Kokoro-82M, loaded on the first synthesis and released when idle.
+
+    The model costs about 300-700 MB of RAM while loaded, so it is only kept
+    in memory while it is being used: the first /tts request loads it (about
+    1-2 s), and it is released after `idle_unload_seconds` without requests
+    (0 keeps it loaded). Voice names come from the voices file's index, so
+    /health and /voices never load the model.
+    """
+
+    def __init__(
+        self,
+        model_path: Path = MODEL_PATH,
+        voices_path: Path = VOICES_PATH,
+        idle_unload_seconds: float = IDLE_UNLOAD_SECONDS,
+        loader: Callable[[Path, Path], object] = load_kokoro,
+        release: Callable[[], None] = release_freed_memory,
+        clock: Callable[[], float] = time.monotonic,
+        start_reaper: bool = True,
+    ):
         if not model_path.exists() or not voices_path.exists():
             raise SystemExit(
                 f"[kokoro] model files missing under {model_path.parent} - run ./setup.sh first"
             )
-        from kokoro_onnx import Kokoro
+        self._model_path = model_path
+        self._voices_path = voices_path
+        self._idle_unload_seconds = max(0.0, idle_unload_seconds)
+        self._loader = loader
+        self._release = release
+        self._clock = clock
+        self._voices = read_voice_names(voices_path)
+        self._kokoro = None
+        self._active = 0  # synthesis calls in flight
+        self._last_used = clock()
+        self._lock = threading.Lock()
+        self._wake = threading.Event()
+        self._stopped = False
+        if start_reaper and self._idle_unload_seconds > 0:
+            threading.Thread(target=self._reap_forever, name="kokoro-idle-unload", daemon=True).start()
 
-        self._kokoro = Kokoro(str(model_path), str(voices_path))
-        self._voices = sorted(self._kokoro.get_voices())
+    @property
+    def idle_unload_seconds(self) -> float:
+        return self._idle_unload_seconds
 
     def voices(self) -> list[str]:
         return self._voices
 
+    def is_loaded(self) -> bool:
+        return self._kokoro is not None
+
     def synthesize(self, text: str, voice: str, speed: float, lang: str) -> bytes:
-        samples, sample_rate = self._kokoro.create(text, voice=voice, speed=speed, lang=lang)
+        with self._lock:
+            if self._kokoro is None:
+                started = time.monotonic()
+                print(f"[kokoro] loading model {self._model_path.name} ...", flush=True)
+                self._kokoro = self._loader(self._model_path, self._voices_path)
+                print(f"[kokoro] model loaded in {time.monotonic() - started:.1f} s", flush=True)
+                self._wake.set()  # let the reaper start counting idle time
+            kokoro = self._kokoro
+            self._active += 1
+        try:
+            samples, sample_rate = kokoro.create(text, voice=voice, speed=speed, lang=lang)
+        finally:
+            with self._lock:
+                self._active -= 1
+                self._last_used = self._clock()
         return wav_bytes(samples, sample_rate)
+
+    def unload_if_idle(self) -> bool:
+        """Release the model if it has been idle long enough; True if released."""
+        with self._lock:
+            if (
+                self._kokoro is None
+                or self._active
+                or self._idle_unload_seconds <= 0
+                or self._clock() - self._last_used < self._idle_unload_seconds
+            ):
+                return False
+            idle = self._clock() - self._last_used
+            self._kokoro = None  # the last reference: no synthesis is in flight
+        self._release()
+        print(f"[kokoro] model released after {idle:.0f} s idle", flush=True)
+        return True
+
+    def seconds_until_unload(self) -> float | None:
+        """Seconds until the model is due for release, or None if not loaded."""
+        with self._lock:
+            if self._kokoro is None or self._idle_unload_seconds <= 0:
+                return None
+            if self._active:
+                return self._idle_unload_seconds
+            return max(0.0, self._last_used + self._idle_unload_seconds - self._clock())
+
+    def stop(self) -> None:
+        self._stopped = True
+        self._wake.set()
+
+    def _reap_forever(self) -> None:
+        while not self._stopped:
+            wait = self.seconds_until_unload()
+            # Not loaded: sleep until a load wakes us. Loaded: wake when due
+            # (plus a hair, so the idle check is past the threshold).
+            self._wake.wait(None if wait is None else wait + 0.05)
+            self._wake.clear()
+            if not self._stopped:
+                self.unload_if_idle()
 
 
 def make_handler(engine: Engine) -> type[BaseHTTPRequestHandler]:
@@ -183,11 +344,14 @@ def make_handler(engine: Engine) -> type[BaseHTTPRequestHandler]:
                 return
             path = self._path()
             if path == "/health":
+                is_loaded = getattr(engine, "is_loaded", None)
                 self._json(200, {
                     "status": "ok",
                     "engine": ENGINE,
                     "version": VERSION,
                     "voices": len(engine.voices()),
+                    # Never loads the model: it only reports whether it is in memory.
+                    "modelLoaded": bool(is_loaded()) if is_loaded else True,
                 })
             elif path == "/voices":
                 self._json(200, {
@@ -260,12 +424,17 @@ def create_server(
 
 
 def main(load_engine: Callable[[], Engine] = KokoroEngine) -> None:
-    print(f"[kokoro] loading model {MODEL_PATH.name} + {VOICES_PATH.name} ...", flush=True)
     engine = load_engine()
     server = create_server(engine)
+    unload = (
+        f"released after {IDLE_UNLOAD_SECONDS:g} s idle"
+        if IDLE_UNLOAD_SECONDS > 0
+        else "kept once loaded"
+    )
     print(
         f"[kokoro] VoiceDock Kokoro server v{VERSION}: "
-        f"{len(engine.voices())} voices on http://{HOST}:{PORT}",
+        f"{len(engine.voices())} voices on http://{HOST}:{PORT} "
+        f"(model loads on the first /tts request, {unload})",
         flush=True,
     )
     try:

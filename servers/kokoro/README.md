@@ -28,7 +28,7 @@ Allowed extension origins get CORS headers, including on the `OPTIONS` preflight
 
 | Method | Path      | Body                                          | Returns                                                |
 | ------ | --------- | --------------------------------------------- | ------------------------------------------------------ |
-| GET    | `/health` | -                                             | `{"status":"ok","engine":"kokoro","version":"1.0.0","voices":54}` |
+| GET    | `/health` | -                                             | `{"status":"ok","engine":"kokoro","version":"1.0.0","voices":54,"modelLoaded":false}` |
 | GET    | `/voices` | -                                             | `{"engine":"kokoro","voices":[...],"defaultVoice":"af_heart"}` |
 | POST   | `/tts`    | `{"text":"...","voice":"af_heart","speed":1}` | `audio/wav` (16-bit PCM, 24 kHz mono)                  |
 
@@ -53,8 +53,34 @@ It is idempotent.
 ./start.sh
 ```
 
-Loads the model once (about 1-2 s) and serves on `127.0.0.1:7478`.
+Serves on `127.0.0.1:7478` right away, without loading the model.
 Override with `KOKORO_HOST` / `KOKORO_PORT`, and point at model files elsewhere with `KOKORO_MODELS_DIR`.
+
+### Memory: the model loads on demand
+
+The model only sits in memory while it is being used:
+
+- The first `/tts` request loads it, which adds about 1-3 s to that request.
+- After `KOKORO_IDLE_UNLOAD_SECONDS` without a `/tts` request (default `600`, 10 minutes), it is released again.
+  Set it to `0` to keep the model loaded once it has loaded.
+- `/health` and `/voices` never load it: voice names come from the voices file's index, and `/health` reports `"modelLoaded": true` or `false`.
+
+Measured on WSL2 (resident memory of the server process):
+
+| State | Memory |
+| --- | --- |
+| Started, model not loaded yet | about 11 MB |
+| Model loaded, while speaking sentence-sized chunks | about 580 MB |
+| After the idle release | about 45 MB |
+
+To change the idle period for the systemd service, add an override:
+
+```bash
+systemctl --user edit kokoro-tts.service
+# [Service]
+# Environment=KOKORO_IDLE_UNLOAD_SECONDS=1800
+systemctl --user restart kokoro-tts.service
+```
 
 `start.sh` runs the server in the foreground with no supervision.
 That is fine for a quick manual run, but if the launching terminal closes (or the process crashes or is OOM-killed) it dies silently.
@@ -93,7 +119,7 @@ That covers reboot and terminal close, but not crash restart, so systemd is pref
 
 ## Tests
 
-The HTTP layer (routes, error shapes, origin check, CORS) is tested with a fake engine and needs only the Python standard library:
+The HTTP layer (routes, error shapes, origin check, CORS) and the on-demand loading and idle release are tested with fakes and need only the Python standard library:
 
 ```bash
 python3 -m unittest discover -s servers/kokoro/tests   # from the repo root
@@ -104,7 +130,7 @@ python3 -m unittest discover -s servers/kokoro/tests   # from the repo root
 ## Verify a running server
 
 ```bash
-curl -s http://127.0.0.1:7478/health
+curl -s http://127.0.0.1:7478/health   # "modelLoaded": false until the first /tts
 curl -s http://127.0.0.1:7478/voices | python3 -m json.tool | head
 curl -s -X POST http://127.0.0.1:7478/tts \
   -H 'Content-Type: application/json' \
