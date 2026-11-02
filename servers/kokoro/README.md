@@ -73,7 +73,7 @@ The model only sits in memory while it is being used:
 - `/health` and `/voices` never load it: voice names come from the voices file's index.
 - `/health` reports the memory state for trays and monitors: `modelLoaded`, `speaking`, `rssMb` (the process's resident memory), when the model was last loaded and released, the last request and the idle seconds (see [`docs/API.md`](../../docs/API.md#get-health)).
 
-Measured on WSL2 (resident memory of the server process):
+Measured on WSL2 (resident memory of the server process; systemd's `MemoryCurrent` for the service reads about the same, because the model files are dropped from the page cache once loaded):
 
 | State | Memory |
 | --- | --- |

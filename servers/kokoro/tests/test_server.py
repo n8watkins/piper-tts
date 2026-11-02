@@ -439,6 +439,12 @@ class HelperTests(unittest.TestCase):
         else:
             self.assertIsNone(rss)
 
+    def test_drop_file_cache_is_safe(self):
+        with tempfile.NamedTemporaryFile() as handle:
+            handle.write(b"x" * 4096)
+            handle.flush()
+            server.drop_file_cache(Path(handle.name), Path(handle.name + ".missing"))
+
     def test_iso_utc(self):
         self.assertIsNone(server.iso_utc(None))
         self.assertEqual(server.iso_utc(0), "1970-01-01T00:00:00Z")

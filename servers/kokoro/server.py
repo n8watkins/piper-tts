@@ -193,10 +193,37 @@ def iso_utc(timestamp: float | None) -> str | None:
     return datetime.fromtimestamp(timestamp, timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def drop_file_cache(*paths: Path) -> None:
+    """Tell the kernel it may drop these files from the page cache (Linux).
+
+    Loading copies the model into the ONNX session, but the 338 MB of model
+    files read on the way stay in the page cache, charged to this service:
+    systemd's MemoryCurrent would count them on top of the model itself, and
+    keep counting them after the model is released. The next load reads them
+    again from disk (well under a second on an SSD).
+    """
+    advise = getattr(os, "posix_fadvise", None)
+    if advise is None:
+        return  # not Linux: nothing to do
+    for path in paths:
+        try:
+            fd = os.open(path, os.O_RDONLY)
+        except OSError:
+            continue
+        try:
+            advise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+        except OSError:
+            pass
+        finally:
+            os.close(fd)
+
+
 def load_kokoro(model_path: Path, voices_path: Path):
     from kokoro_onnx import Kokoro
 
-    return Kokoro(str(model_path), str(voices_path))
+    kokoro = Kokoro(str(model_path), str(voices_path))
+    drop_file_cache(model_path, voices_path)
+    return kokoro
 
 
 class KokoroEngine:
