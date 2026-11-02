@@ -1,7 +1,7 @@
 /**
- * LocalVoice Piper server
+ * VoiceDock Piper server
  *
- * Runs on http://127.0.0.1:7477 by default and speaks the shared LocalVoice
+ * Runs on http://127.0.0.1:7477 by default and speaks the shared VoiceDock
  * API (docs/API.md in the repo root):
  * GET  /health                  → { status, engine: "piper", version }
  * GET  /voices                  → { engine, voices, defaultVoice, sizes, voiceDir }
@@ -52,7 +52,7 @@ function enforceAllowedOrigin(req, res, next) {
     next();
     return;
   }
-  res.status(403).json({ error: "Origin not allowed by the LocalVoice Piper server." });
+  res.status(403).json({ error: "Origin not allowed by the VoiceDock Piper server." });
 }
 
 const corsOptions = {
@@ -356,7 +356,7 @@ async function cleanOutputDir() {
 async function start() {
   await cleanOutputDir();
   return app.listen(PORT, HOST, () => {
-    console.log(`\n🔊 LocalVoice Piper server v${version}`);
+    console.log(`\n🔊 VoiceDock Piper server v${version}`);
     console.log(`   Running at http://${HOST}:${PORT}`);
     console.log(`   Health:  GET  http://${HOST}:${PORT}/health`);
     console.log(`   TTS:     POST http://${HOST}:${PORT}/tts`);

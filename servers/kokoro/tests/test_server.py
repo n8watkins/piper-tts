@@ -1,4 +1,4 @@
-"""Tests for the LocalVoice Kokoro server's HTTP layer (stdlib only).
+"""Tests for the VoiceDock Kokoro server's HTTP layer (stdlib only).
 
 A fake engine stands in for kokoro-onnx, so these run anywhere Python 3.9+ is
 installed: python3 -m unittest discover -s servers/kokoro/tests

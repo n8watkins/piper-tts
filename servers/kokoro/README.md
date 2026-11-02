@@ -1,11 +1,11 @@
-# LocalVoice Kokoro server
+# VoiceDock Kokoro server
 
 A small local [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) text-to-speech server backed by [`kokoro-onnx`](https://github.com/thewh1teagle/kokoro-onnx).
-It is one of the two LocalVoice engines: the extension can read with Piper (`servers/piper`, port 7477) or Kokoro (this server, port 7478), chosen per profile.
+It is one of the two VoiceDock engines: the extension can read with Piper (`servers/piper`, port 7477) or Kokoro (this server, port 7478), chosen per profile.
 
 Kokoro sounds more natural than Piper and ships 54 voices in 9 languages, at a small latency cost (about 1.5 s warm for one sentence versus 1.15 s for Piper).
 
-It speaks the shared LocalVoice API described in [`docs/API.md`](../../docs/API.md).
+It speaks the shared VoiceDock API described in [`docs/API.md`](../../docs/API.md).
 
 ## History
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=LocalVoice Kokoro TTS server (local, 127.0.0.1:7478)
+Description=VoiceDock Kokoro TTS server (local, 127.0.0.1:7478)
 # Retry forever: WSL/terminal churn (a closed launching pane's SIGHUP) or a
 # crash must never permanently, silently kill the engine - that outage is the
 # whole reason this unit exists.

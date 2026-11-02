@@ -812,7 +812,7 @@ function OptionsApp() {
                     {ENGINES[engine].blurb}{' '}
                     {online ? '' : 'No server detected. '}
                     Run <code className="setting-code">{setup.command}</code> in <code className="setting-code">{setup.folder}</code> {setup.what}{' '}
-                    <a href={`https://github.com/n8watkins/piper-tts#${setup.anchor}`} target="_blank" rel="noreferrer" className="setting-link">Setup guide ↗</a>
+                    <a href={`https://github.com/n8watkins/voicedock#${setup.anchor}`} target="_blank" rel="noreferrer" className="setting-link">Setup guide ↗</a>
                   </span>
                 </div>
               </div>
@@ -869,7 +869,7 @@ function OptionsApp() {
           <div className="credits-section">
             <h4 className="credits-section-title">Setup</h4>
             <p className="credits-body">Full installation instructions, including how to set up the Piper and Kokoro servers, add voices, and load the extension, are in the project README.</p>
-            <a className="btn btn-primary credits-readme-btn" href="https://github.com/n8watkins/piper-tts#readme" target="_blank">View README &amp; Setup Guide ↗</a>
+            <a className="btn btn-primary credits-readme-btn" href="https://github.com/n8watkins/voicedock#readme" target="_blank">View README &amp; Setup Guide ↗</a>
           </div>
         </section>
       )}
@@ -888,10 +888,10 @@ function OptionsApp() {
           </div>
           <div className="credits-section">
             <h4 className="credits-section-title">Source &amp; License</h4>
-            <p className="credits-body">LocalVoice is MIT licensed and runs locally: selected text is sent only to your own localhost server, which runs your installed Piper or Kokoro voices. No cloud service or API key is required.</p>
-            <a className="dep-card dep-card-github" href="https://github.com/n8watkins/piper-tts" target="_blank">
+            <p className="credits-body">VoiceDock is MIT licensed and runs locally: selected text is sent only to your own localhost server, which runs your installed Piper or Kokoro voices. No cloud service or API key is required.</p>
+            <a className="dep-card dep-card-github" href="https://github.com/n8watkins/voicedock" target="_blank">
               <span className="dep-card-github-icon"><GithubIcon /></span>
-              <span className="dep-card-github-text"><span className="dep-name">n8watkins/piper-tts</span><span className="dep-desc">View source on GitHub</span></span>
+              <span className="dep-card-github-text"><span className="dep-name">n8watkins/voicedock</span><span className="dep-desc">View source on GitHub</span></span>
             </a>
           </div>
         </section>

@@ -835,7 +835,7 @@ body {
 .quality-med   { background: #1e3a2a; color: #a6e3a1; }
 .quality-high  { background: #3a1e2e; color: #f38ba8; }
 
-/* ─── Engines (LocalVoice) ───────────────────────────────────────────────────── */
+/* ─── Engines (VoiceDock) ───────────────────────────────────────────────────── */
 .engine-switch {
   display: inline-flex;
   gap: 4px;
