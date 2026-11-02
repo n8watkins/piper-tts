@@ -140,7 +140,7 @@ const chromeShim = `
   window.chrome = {
     runtime: {
       lastError: null,
-      getManifest: () => ({ version: '${manifest.version}', name: 'LocalVoice' }),
+      getManifest: () => ({ version: '${manifest.version}', name: 'VoiceDock' }),
       openOptionsPage: () => {},
       sendMessage(message, callback) {
         const response = message?.type === 'get-playback-state'

@@ -5,12 +5,12 @@ No N8 Tray or n8piper code has been changed.
 
 ## Goal
 
-Replace the `n8piper` module (Piper only) with one N8 Tray module, **`n8voice`**, that shows and controls both LocalVoice engines:
+Replace the `n8piper` module (Piper only) with one N8 Tray module, **`n8voice`**, that shows and controls both VoiceDock engines:
 
 - **Piper** on Windows: the Node server in `servers/piper`, port 7477, as n8piper runs it today.
 - **Kokoro** in WSL: the Python server in `servers/kokoro`, port 7478, run by the systemd user unit `kokoro-tts`.
 
-The tray should answer "can LocalVoice read right now, and with which engines?" at a glance, and offer start, stop and restart per engine.
+The tray should answer "can VoiceDock read right now, and with which engines?" at a glance, and offer start, stop and restart per engine.
 
 ## Today
 
@@ -18,7 +18,7 @@ The tray should answer "can LocalVoice read right now, and with which engines?" 
 | --- | --- | --- |
 | N8 Tray | `C:\Users\natha\scripts\n8tray\n8tray.ps1` (0.10.0) | Built-in panels per module; module list in `n8tray\config\settings.json`. |
 | n8piper | `C:\Users\natha\scripts\n8piper` | `modular.json` id `piper-tts`; `piper-tts.ps1` wrapper; `config\settings.json` has `server.path`, `port`, `host`. Adopts an already-healthy server, starts `server.js` with a named Node copy (`piper-tts-server.exe`), writes a pid file, and only ever stops its own server. Health: `GET /health`, 300 ms. |
-| Piper server | `C:\Users\natha\Projects\Tools\piper-tts\local-piper-server` | Moves to `...\localvoice\servers\piper` with `UPDATE_WINDOWS_SERVER.md`. |
+| Piper server | `C:\Users\natha\Projects\Tools\piper-tts\local-piper-server` | Moves to `...\voicedock\servers\piper` with `UPDATE_WINDOWS_SERVER.md`. |
 | Kokoro server | WSL `Ubuntu-24.04`, `~/projects/extensions/kokoro-tts` (moving to `servers/kokoro`) | systemd user unit `kokoro-tts`, enabled with lingering, `Restart=always`. Uses about 610 MB of RAM once loaded. Reachable from Windows at `127.0.0.1:7478` through WSL localhost mirroring. |
 
 The tray guide's rules that shape this design (from `TRAY_MODULE_GUIDE.md`):
@@ -50,7 +50,7 @@ C:\Users\natha\scripts\n8voice\
 {
   "piper": {
     "enabled": true,
-    "path": "C:\\Users\\natha\\Projects\\Tools\\localvoice\\servers\\piper",
+    "path": "C:\\Users\\natha\\Projects\\Tools\\voicedock\\servers\\piper",
     "host": "127.0.0.1",
     "port": 7477
   },
@@ -76,9 +76,9 @@ C:\Users\natha\scripts\n8voice\
 {
   "schemaVersion": 2,
   "id": "n8voice",
-  "name": "LocalVoice",
+  "name": "VoiceDock",
   "group": "Audio",
-  "description": "Runs the LocalVoice engines: Piper on Windows and Kokoro in WSL.",
+  "description": "Runs the VoiceDock engines: Piper on Windows and Kokoro in WSL.",
   "entry": "n8voice.ps1",
   "settings": "config/settings.json",
   "settingsExample": "config/settings.example.json",
@@ -104,7 +104,7 @@ One long-running wrapper, as n8piper is today, single-instance by a named mutex 
 **Piper** (lifted from `piper-tts.ps1` with only renames):
 
 - If `GET /health` on the Piper port already answers, adopt it (another tray or app started it) and don't start a second one.
-- Otherwise start `server.js` with a named Node copy, `localvoice-piper.exe`, so Task Manager shows what it is, with `PORT`/`HOST` in the environment.
+- Otherwise start `server.js` with a named Node copy, `voicedock-piper.exe`, so Task Manager shows what it is, with `PORT`/`HOST` in the environment.
 - Write `logs\piper-server.pid` as `<pid> <start ticks>` (guards against pid reuse) and only ever stop that process.
 - If the server exits unexpectedly, restart it with a short backoff (n8piper currently just logs and exits; adding a restart loop is the one behavior change).
 
@@ -119,13 +119,13 @@ One long-running wrapper, as n8piper is today, single-instance by a named mutex 
   It stays stopped until the next WSL boot or **Start Kokoro** (systemd re-enables it at boot because the unit is enabled; a "keep stopped" option could `disable` it, but that is out of scope).
 - **Restart Kokoro**: `systemctl --user restart <unit>`; the model takes 1-2 s to load, so the panel shows "starting" until `/health` answers.
 - The wrapper never polls WSL; status comes only from the HTTP health check.
-- Module stop (tray **Stop LocalVoice**) stops the Piper server it started and leaves Kokoro running, because Kokoro also serves anything else that uses it in WSL.
+- Module stop (tray **Stop VoiceDock**) stops the Piper server it started and leaves Kokoro running, because Kokoro also serves anything else that uses it in WSL.
   The panel has an explicit **Stop Kokoro** for that.
 
 ### Panel
 
 ```
-LocalVoice                         ● running
+VoiceDock                         ● running
   Piper   ● online   127.0.0.1:7477   [Restart] [Stop]
   Kokoro  ● online   127.0.0.1:7478   [Restart] [Stop]
   ─────────────────────────────────────────────
@@ -134,7 +134,7 @@ LocalVoice                         ● running
 ```
 
 - Per-engine status: online, offline, starting, external (Piper adopted), WSL off (Kokoro, from `Test-N8WslDistroRunning` on the poller, not the UI thread).
-- Status line in the tray menu: `LocalVoice: Piper ✓ Kokoro ✓`, or `LocalVoice: Piper ✓ Kokoro (WSL off)`.
+- Status line in the tray menu: `VoiceDock: Piper ✓ Kokoro ✓`, or `VoiceDock: Piper ✓ Kokoro (WSL off)`.
 - Tray icon tint follows the worst state of the enabled engines, as other modules do.
 
 ### Tray changes (in `n8tray.ps1`, later)
@@ -165,13 +165,13 @@ Rollback: re-enable `piper-tts`, disable `n8voice`, restart the tray.
 ## Naming
 
 The module name follows the product name.
-If LocalVoice is renamed (see `docs/NAMING.md`), rename the folder, `id`, mutex, named Node copy and panel title together, before the module ships, so it only changes once.
+If VoiceDock is renamed (see `docs/NAMING.md`), rename the folder, `id`, mutex, named Node copy and panel title together, before the module ships, so it only changes once.
 
 ## Test plan
 
 - Piper adopt: start the standalone Piper tray first, then n8voice: status shows "external" and **Stop Piper** is disabled.
 - Piper own: n8voice starts Piper, `logs\piper-server.pid` is written, **Stop Piper** stops exactly that pid.
-- Piper crash: kill `localvoice-piper.exe`; n8voice restarts it within a few seconds.
+- Piper crash: kill `voicedock-piper.exe`; n8voice restarts it within a few seconds.
 - Kokoro with WSL running: **Restart Kokoro** → status goes starting → online; `systemctl --user status kokoro-tts` agrees.
 - Kokoro with WSL shut down (`wsl --shutdown`) and `startWsl: false`: the module starts, Kokoro shows "WSL off", and `wsl --list --running` stays empty (n8voice did not boot WSL).
 - Same with `startWsl: true`: WSL boots and Kokoro comes online.
@@ -180,6 +180,6 @@ If LocalVoice is renamed (see `docs/NAMING.md`), rename the folder, `id`, mutex,
 
 ## Open questions for the owner
 
-- Should starting LocalVoice ever boot WSL (`kokoro.startWsl`)? The plan defaults to no.
+- Should starting VoiceDock ever boot WSL (`kokoro.startWsl`)? The plan defaults to no.
 - Keep the standalone Piper tray in `servers/piper/tray` for public users? The plan keeps it; n8voice coexists with it by adopting.
-- Module id: `n8voice` (matching the other n8 modules) with display name "LocalVoice", or rename both with the product?
+- Module id: `n8voice` (matching the other n8 modules) with display name "VoiceDock", or rename both with the product?

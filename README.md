@@ -1,24 +1,24 @@
-# LocalVoice
+# VoiceDock
 
 A Chrome extension that reads selected text aloud with neural voices running on your own machine.
 Highlight text on any webpage, right-click it (or press `Alt+Shift+R`), and hear it read by a local engine: no cloud, no API keys, no text leaves your computer.
 
-LocalVoice has two local engines, chosen per profile:
+VoiceDock has two local engines, chosen per profile:
 
 - **[Piper](https://github.com/rhasspy/piper)**: fast and light, with downloadable English voices (Node.js server on port 7477).
 - **[Kokoro](https://huggingface.co/hexgrad/Kokoro-82M)**: more natural, 54 voices in 9 languages, slightly slower (Python server on port 7478).
 
 The browser's built-in voice is a third choice and the automatic fallback when an engine is offline, so the extension works instantly with no server at all.
 
-> LocalVoice was called **Piper TTS** up to version 1.0.17.
-> The GitHub repo is still `n8watkins/piper-tts`, and settings saved by Piper TTS carry over automatically.
+> VoiceDock was called **Piper TTS** up to version 1.0.17.
+> The GitHub repo was `n8watkins/piper-tts` (the old URL redirects), and settings saved by Piper TTS carry over automatically.
 > See [docs/NAMING.md](docs/NAMING.md) for the name and what a rename touches.
 
-<img src="screenshots/piper-icon.png" alt="LocalVoice extension icon" width="96">
+<img src="screenshots/piper-icon.png" alt="VoiceDock extension icon" width="96">
 
 ## Screenshots
 
-<img src="screenshots/popup.png" alt="LocalVoice popup showing a Kokoro profile with speed, volume, test, and stop controls" width="300">
+<img src="screenshots/popup.png" alt="VoiceDock popup showing a Kokoro profile with speed, volume, test, and stop controls" width="300">
 
 <img src="screenshots/options-profiles.png" alt="Profiles tab, editing a profile that uses the Kokoro engine" width="560">
 
@@ -26,7 +26,7 @@ The browser's built-in voice is a third choice and the automatic fallback when a
 
 <img src="screenshots/options-settings.png" alt="Settings tab with the browser fallback, both engine servers, and keyboard shortcuts" width="560">
 
-<img src="screenshots/options-about.png" alt="About tab explaining how LocalVoice works" width="560">
+<img src="screenshots/options-about.png" alt="About tab explaining how VoiceDock works" width="560">
 
 <img src="screenshots/options-credits.png" alt="Credits tab" width="560">
 
@@ -38,7 +38,7 @@ If your Windows account, Chrome path, or Windows Node path differs from the defa
 ## What's in this repo
 
 ```
-piper-tts/                      (LocalVoice)
+voicedock/                      (VoiceDock)
 ├── extension/                  Chrome Manifest V3 extension
 │   ├── manifest.json
 │   ├── background.js           Service worker: menus, shortcuts, engine choice, fallback
@@ -52,7 +52,7 @@ piper-tts/                      (LocalVoice)
 │   └── kokoro/                 Python server that runs Kokoro-82M (port 7478), plus a systemd unit
 ├── docs/
 │   ├── API.md                  The engine API both servers implement
-│   ├── NAMING.md               The LocalVoice name, alternatives, and what a rename touches
+│   ├── NAMING.md               The VoiceDock name, alternatives, and what a rename touches
 │   └── TRAY_PLAN.md            Plan for one N8 Tray module that runs both engines
 ├── UPDATE_WINDOWS_SERVER.md    How to update the Piper server running on Windows
 ├── test/                       node --test: extension helpers, engine routing, Piper server contract
@@ -74,7 +74,7 @@ npm run deploy                 # copy the built extension/ to the Windows folder
 ```
 
 `npm run deploy` mirrors `extension/` into the Windows folder that Chrome loads unpacked.
-It looks for `…/Projects/Tools/piper-tts`, then `…/localvoice`, then `…/local-tts-reader`; override with `LOCALVOICE_WINDOWS_DIR`.
+It looks for `…/Projects/Tools/piper-tts`, then `…/voicedock`, then `…/local-tts-reader`; override with `VOICEDOCK_WINDOWS_DIR`.
 An unpacked extension's ID, and so its saved settings, depends on its folder path, so keep Chrome on the folder it already loads.
 It only touches `extension/`, never a server or its downloaded binaries and voices.
 Reload at `chrome://extensions` afterward.
@@ -93,8 +93,8 @@ The servers are versioned separately from the extension.
 ### Step 1 - Get the code
 
 ```bash
-git clone https://github.com/n8watkins/piper-tts.git localvoice
-cd localvoice
+git clone https://github.com/n8watkins/voicedock.git voicedock
+cd voicedock
 ```
 
 ### Step 2 - Load the Chrome extension
@@ -103,7 +103,7 @@ cd localvoice
 2. Turn on **Developer mode** (top right).
 3. Click **Load unpacked** and select the **`extension/`** folder.
 
-The LocalVoice icon appears in the toolbar.
+The VoiceDock icon appears in the toolbar.
 
 > **You can stop here.**
 > The extension already reads with your browser's built-in voice.
@@ -141,7 +141,7 @@ It is idempotent, so re-run it anytime.
    npm start
    ```
 
-   You should see `LocalVoice Piper server` and `Running at http://127.0.0.1:7477`.
+   You should see `VoiceDock Piper server` and `Running at http://127.0.0.1:7477`.
 
 Platform helpers, all from `servers/piper/`:
 
@@ -252,7 +252,7 @@ Both servers implement the same small API, documented in [docs/API.md](docs/API.
 
 ## Privacy and security
 
-LocalVoice sends selected text only to servers on your own machine.
+VoiceDock sends selected text only to servers on your own machine.
 Both servers bind to `127.0.0.1` and reject requests from web pages: only requests from a Chrome extension, or with no `Origin` header at all (curl, scripts), are served.
 So a site you visit can't use your local engines.
 

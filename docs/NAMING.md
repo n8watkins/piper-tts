@@ -1,10 +1,11 @@
 # Naming
 
-**LocalVoice** is the working name for the merged product (Piper TTS + Kokoro TTS), decided 2026-11-01.
-It says what the product is: voices that run locally.
-The code, extension and docs now use it, while the GitHub repo is still `n8watkins/piper-tts` and the Chrome Web Store listing is still "Piper TTS".
+**VoiceDock** is the name of the merged product (Piper TTS + Kokoro TTS), decided 2026-11-02.
+LocalVoice was the working name on 2026-11-01, dropped because its npm name and both domains are taken.
+The code, extension, docs and GitHub repo (`n8watkins/voicedock`, renamed from `n8watkins/piper-tts`) use it.
+The Chrome Web Store listing is still "Piper TTS" until the next store upload.
 
-This page lists the working name and five alternatives with a quick availability check, then what a rename touches.
+This page keeps the availability check that picked the name with a quick availability check, then what a rename touches.
 
 ## Availability check (2026-11-01)
 
@@ -18,8 +19,8 @@ How each column was checked:
 
 | Name | One line | GitHub `n8watkins/` | Public repos with the name | npm | `.dev` | `.app` | Chrome Web Store |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **LocalVoice** (working) | Plain and descriptive: voices that run on your machine. | free | 132 | taken ("Local voice utilities", 2026) | registered | registered | "Voice Typer - Local Voice" exists (different product, similar name) |
-| **VoiceDock** | Your voices, docked on your own machine; short and brandable. | free | 19 | free | not found | not found | no match |
+| **LocalVoice** (dropped) | Plain and descriptive: voices that run on your machine. | free | 132 | taken ("Local voice utilities", 2026) | registered | registered | "Voice Typer - Local Voice" exists (different product, similar name) |
+| **VoiceDock** (chosen) | Your voices, docked on your own machine; short and brandable. | free | 19 | free | not found | not found | no match |
 | **HearthVoice** | Warm, homey: the voice that lives at home with you. | free | 4 | free | not found | not found | no match |
 | **VoxHaven** | A safe harbor for your text: private, local speech. | free | 0 | free | not found | not found | no match |
 | **NearVoice** | The voice is near: on-device, not in a data center. | free | 7 | free | registered | not found | no match |

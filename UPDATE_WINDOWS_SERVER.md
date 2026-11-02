@@ -1,6 +1,6 @@
 # Updating the Piper server running on Windows
 
-This is a one-time owner checklist for moving the Windows Piper server onto the LocalVoice 1.1 code.
+This is a one-time owner checklist for moving the Windows Piper server onto the VoiceDock 1.1 code.
 Nothing here has been done for you: the running server was deliberately left alone.
 
 ## What is running today (checked 2026-11-01)
@@ -35,14 +35,14 @@ The other files that differ are older than the repo, not edits either:
 - `extension\offscreen.js` lacks the last extension fix ("Abort in-flight prefetch on stop").
 
 So there was nothing to fold back into the repo.
-Updating gets you: the `config.js` refactor, the setup fix, the patched dependencies, the `engine` field and JSON 404s that the LocalVoice API expects (see `docs/API.md`), and consistent 7477 defaults everywhere.
+Updating gets you: the `config.js` refactor, the setup fix, the patched dependencies, the `engine` field and JSON 404s that the VoiceDock API expects (see `docs/API.md`), and consistent 7477 defaults everywhere.
 
 ## Plan
 
 Put the new server in a fresh clone next to the old folder, point n8piper at it, and keep Chrome loading the extension from the old folder.
 
 Chrome derives an unpacked extension's id from its folder path, and the saved profiles belong to that id.
-Loading the extension from a new folder would start LocalVoice with empty settings, so the extension stays where it is and is updated with `npm run deploy` from WSL.
+Loading the extension from a new folder would start VoiceDock with empty settings, so the extension stays where it is and is updated with `npm run deploy` from WSL.
 
 Total time: about 10 minutes, with Piper unavailable for under a minute while it restarts.
 
@@ -53,21 +53,21 @@ Run these in PowerShell unless they say WSL.
 1. **Clone the repo** into a new folder:
 
    ```powershell
-   git clone https://github.com/n8watkins/piper-tts.git C:\Users\natha\Projects\Tools\localvoice
+   git clone https://github.com/n8watkins/voicedock.git C:\Users\natha\Projects\Tools\voicedock
    ```
 
 2. **Copy the Piper binary and voices** from the old server (nothing is moved or deleted):
 
    ```powershell
-   robocopy C:\Users\natha\Projects\Tools\piper-tts\local-piper-server\piper C:\Users\natha\Projects\Tools\localvoice\servers\piper\piper /E
+   robocopy C:\Users\natha\Projects\Tools\piper-tts\local-piper-server\piper C:\Users\natha\Projects\Tools\voicedock\servers\piper\piper /E
    ```
 
-   Then check that `C:\Users\natha\Projects\Tools\localvoice\servers\piper\piper\piper.exe` exists and `voices\` holds the 8 `.onnx` files with their `.onnx.json` configs.
+   Then check that `C:\Users\natha\Projects\Tools\voicedock\servers\piper\piper\piper.exe` exists and `voices\` holds the 8 `.onnx` files with their `.onnx.json` configs.
 
 3. **Install the server's dependencies:**
 
    ```powershell
-   cd C:\Users\natha\Projects\Tools\localvoice\servers\piper
+   cd C:\Users\natha\Projects\Tools\voicedock\servers\piper
    npm ci
    ```
 
@@ -82,7 +82,7 @@ Run these in PowerShell unless they say WSL.
    ```powershell
    Invoke-RestMethod http://127.0.0.1:7577/health
    # expect: status ok, engine piper, version 1.0.0
-   Invoke-WebRequest -Method Post -Uri http://127.0.0.1:7577/tts -ContentType 'application/json' -Body '{"text":"LocalVoice check","voice":"en_US-ryan-high.onnx"}' -OutFile $env:TEMP\lv-check.wav
+   Invoke-WebRequest -Method Post -Uri http://127.0.0.1:7577/tts -ContentType 'application/json' -Body '{"text":"VoiceDock check","voice":"en_US-ryan-high.onnx"}' -OutFile $env:TEMP\lv-check.wav
    ```
 
    Play `%TEMP%\lv-check.wav`, then stop the test server with Ctrl+C and `Remove-Item Env:PORT`.
@@ -97,7 +97,7 @@ Run these in PowerShell unless they say WSL.
    ```json
    {
      "server": {
-       "path": "C:\\Users\\natha\\Projects\\Tools\\localvoice\\servers\\piper",
+       "path": "C:\\Users\\natha\\Projects\\Tools\\voicedock\\servers\\piper",
        "port": 7477,
        "host": "127.0.0.1"
      }
@@ -124,7 +124,7 @@ Run these in PowerShell unless they say WSL.
    ```
 
    Then reload it at `chrome://extensions`.
-   It now shows as **LocalVoice 1.1.0**, your profiles carry over (the migration runs on update), and each profile can pick Piper or Kokoro.
+   It now shows as **VoiceDock 1.1.0**, your profiles carry over (the migration runs on update), and each profile can pick Piper or Kokoro.
 
 ## Rollback
 

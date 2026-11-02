@@ -93,10 +93,10 @@ async function migrateAndRebuild() {
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  migrateAndRebuild().catch(err => console.error("[LocalVoice] migration failed:", err));
+  migrateAndRebuild().catch(err => console.error("[VoiceDock] migration failed:", err));
 });
 chrome.runtime.onStartup?.addListener(() => {
-  migrateAndRebuild().catch(err => console.error("[LocalVoice] migration failed:", err));
+  migrateAndRebuild().catch(err => console.error("[VoiceDock] migration failed:", err));
 });
 
 // Rebuild whenever profiles or activeId change (popup saved new data).

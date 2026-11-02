@@ -2,7 +2,7 @@
 // the React UI bundles, so engine URLs, the seed profile, and the settings
 // migration can't drift between them. Keep it free of JSX and DOM APIs.
 
-export const APP_NAME = 'LocalVoice';
+export const APP_NAME = 'VoiceDock';
 
 // ─── Engines ─────────────────────────────────────────────────────────────────
 // Piper and Kokoro are local servers speaking the same API (docs/API.md);
@@ -92,7 +92,7 @@ export function defaultProfile() {
 // what to remove. Safe to run any number of times (idempotent), from the
 // service worker on install/update/startup and from the UI pages on load.
 //
-// v1 (Piper TTS <= 1.0.x) → v2 (LocalVoice 1.1):
+// v1 (Piper TTS <= 1.0.x) → v2 (VoiceDock 1.1):
 //   fallbackToBrowser    → fallback
 //   profiles[].voice     → profiles[].engine + voice (engine inferred)
 //   profile "Default"    → "Profile 1" (the seed profile's old name)

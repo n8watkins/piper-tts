@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""LocalVoice Kokoro server: a small local Kokoro-82M TTS server (kokoro-onnx).
+"""VoiceDock Kokoro server: a small local Kokoro-82M TTS server (kokoro-onnx).
 
-It speaks the same HTTP API as the LocalVoice Piper server (see
+It speaks the same HTTP API as the VoiceDock Piper server (see
 docs/API.md in the repo root):
 
   GET  /health  -> {"status": "ok", "engine": "kokoro", "version": "...", "voices": 54}
@@ -130,7 +130,7 @@ def make_handler(engine: Engine) -> type[BaseHTTPRequestHandler]:
     """Build a request handler bound to one engine instance."""
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = f"LocalVoiceKokoro/{VERSION}"
+        server_version = f"VoiceDockKokoro/{VERSION}"
 
         # Quieter logs; the default logs every request line to stderr.
         def log_message(self, fmt, *args):  # noqa: N802 (stdlib signature)
@@ -160,7 +160,7 @@ def make_handler(engine: Engine) -> type[BaseHTTPRequestHandler]:
             """Send 403 and return True when the request's Origin is not allowed."""
             if is_allowed_origin(self._origin()):
                 return False
-            self._json(403, {"error": "Origin not allowed by the LocalVoice Kokoro server."})
+            self._json(403, {"error": "Origin not allowed by the VoiceDock Kokoro server."})
             return True
 
         def _path(self) -> str:
@@ -264,7 +264,7 @@ def main(load_engine: Callable[[], Engine] = KokoroEngine) -> None:
     engine = load_engine()
     server = create_server(engine)
     print(
-        f"[kokoro] LocalVoice Kokoro server v{VERSION}: "
+        f"[kokoro] VoiceDock Kokoro server v{VERSION}: "
         f"{len(engine.voices())} voices on http://{HOST}:{PORT}",
         flush=True,
     )

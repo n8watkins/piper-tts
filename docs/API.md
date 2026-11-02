@@ -1,6 +1,6 @@
-# LocalVoice engine API
+# VoiceDock engine API
 
-Both LocalVoice engines are small local HTTP servers that speak the same API, so the extension (and any other local client) can treat them alike.
+Both VoiceDock engines are small local HTTP servers that speak the same API, so the extension (and any other local client) can treat them alike.
 
 | Engine | Server | Default address | Runs on |
 | --- | --- | --- | --- |

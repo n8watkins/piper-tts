@@ -6,7 +6,7 @@
 //
 //   node tools/deploy-windows.mjs
 //
-// Override the destination with LOCALVOICE_WINDOWS_DIR (or the older
+// Override the destination with VOICEDOCK_WINDOWS_DIR (or the older
 // PIPER_TTS_WINDOWS_DIR), or the user with PIPER_TTS_WINDOWS_USER. After it runs, reload the extension at
 // chrome://extensions to pick up the changes.
 import { execFileSync } from 'child_process';
@@ -19,15 +19,15 @@ const windowsUser = process.env.PIPER_TTS_WINDOWS_USER || 'natha';
 const toolsDir = `/mnt/c/Users/${windowsUser}/Projects/Tools`;
 
 // Destination: explicit override wins; otherwise the piper-tts folder Chrome
-// already loads, then a localvoice clone, then the original local-tts-reader.
+// already loads, then a voicedock clone, then the original local-tts-reader.
 // piper-tts comes first on purpose: an unpacked extension's ID (and with it
 // every saved profile) is derived from its folder path, so moving Chrome to a
 // new folder would start from empty settings. See UPDATE_WINDOWS_SERVER.md.
-const dest = process.env.LOCALVOICE_WINDOWS_DIR || process.env.PIPER_TTS_WINDOWS_DIR ||
-  ['piper-tts', 'localvoice', 'local-tts-reader'].map((name) => join(toolsDir, name)).find(existsSync);
+const dest = process.env.VOICEDOCK_WINDOWS_DIR || process.env.PIPER_TTS_WINDOWS_DIR ||
+  ['piper-tts', 'voicedock', 'local-tts-reader'].map((name) => join(toolsDir, name)).find(existsSync);
 
 if (!dest || !existsSync(dest)) {
-  console.error('Windows project folder not found. Set LOCALVOICE_WINDOWS_DIR to its path.');
+  console.error('Windows project folder not found. Set VOICEDOCK_WINDOWS_DIR to its path.');
   process.exit(1);
 }
 if (!existsSync(join(dest, 'extension'))) {

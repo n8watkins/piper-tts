@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const voiceDir = mkdtempSync(join(tmpdir(), 'localvoice-piper-voices-'));
+const voiceDir = mkdtempSync(join(tmpdir(), 'voicedock-piper-voices-'));
 writeFileSync(join(voiceDir, 'en_US-test-medium.onnx'), 'x'.repeat(10));
 writeFileSync(join(voiceDir, 'en_US-test-medium.onnx.json'), '{}');
 process.env.VOICE_DIR = voiceDir;
