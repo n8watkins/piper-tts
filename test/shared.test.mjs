@@ -39,6 +39,7 @@ test('defaultProfile has the expected shape', () => {
   assert.deepEqual(defaultProfile(), {
     id: 'default',
     name: 'Profile 1',
+    engine: 'browser',
     voice: '',
     rate: 1.0,
     volume: 1.0,

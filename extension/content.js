@@ -1,4 +1,4 @@
-// ─── Piper TTS — Content Script ──────────────────────────────────────────────
+// ─── LocalVoice - Content Script ──────────────────────────────────────────────
 // Injected into every webpage.
 //   1. Selection bridge for Chrome commands
 //   2. Floating "Now Playing" overlay (shadow DOM, bottom-right corner)
@@ -18,7 +18,7 @@ let _localPlaying  = false;
 let _localPaused   = false;
 let _currentVolume = 1.0;
 let _currentRate   = 1.0;
-let _currentEngine = null; // "piper" | "browser" — browser TTS can't adjust live
+let _currentEngine = null; // "piper" | "kokoro" | "browser": browser TTS can't adjust live
 let _runtimeUnavailable = false;
 let _playbackPollTimer = null;
 
@@ -48,7 +48,7 @@ function getRuntimeLastError() {
       markRuntimeUnavailable();
       return error;
     }
-    console.warn("[Piper TTS] runtime lastError failed", error);
+    console.warn("[LocalVoice] runtime lastError failed", error);
     return error;
   }
 }
@@ -60,7 +60,7 @@ function safeRuntimeCallback(callback) {
       callback(...args);
     } catch (error) {
       if (isRuntimeUnavailableError(error)) markRuntimeUnavailable();
-      else console.warn("[Piper TTS] runtime callback failed", error);
+      else console.warn("[LocalVoice] runtime callback failed", error);
     }
   };
 }
@@ -76,12 +76,12 @@ function sendRuntimeMessage(message, callback) {
     if (maybePromise?.catch) {
       maybePromise.catch((error) => {
         if (isRuntimeUnavailableError(error)) markRuntimeUnavailable();
-        else if (!isExpectedRuntimeMessageError(error)) console.warn("[Piper TTS] runtime message failed", error);
+        else if (!isExpectedRuntimeMessageError(error)) console.warn("[LocalVoice] runtime message failed", error);
       });
     }
   } catch (error) {
     if (isRuntimeUnavailableError(error)) markRuntimeUnavailable();
-    else if (!isExpectedRuntimeMessageError(error)) console.warn("[Piper TTS] runtime message failed", error);
+    else if (!isExpectedRuntimeMessageError(error)) console.warn("[LocalVoice] runtime message failed", error);
   }
 }
 
@@ -112,7 +112,7 @@ try {
   });
 } catch (error) {
   if (isRuntimeUnavailableError(error)) markRuntimeUnavailable();
-  else console.warn("[Piper TTS] runtime listener failed", error);
+  else console.warn("[LocalVoice] runtime listener failed", error);
 }
 
 // Stop when this tab navigates away or closes

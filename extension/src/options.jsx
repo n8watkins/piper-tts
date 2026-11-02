@@ -1,14 +1,25 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  APP_NAME,
   defaultProfile,
+  describeProfileVoice,
+  ENGINES,
+  engineBaseUrl,
+  engineLabel,
+  ENGINE_IDS,
+  favoritesFor,
   fmt,
   formatBytes,
   formatVoiceName,
+  kokoroVoiceDetails,
+  LOCAL_ENGINE_IDS,
   MAX_FAVORITES,
   MAX_PROFILES,
+  normalizeProfile,
   PIPER_BASE_URL,
   qualityFromFilename,
+  runSettingsMigration,
   uuid,
 } from './shared.js';
 
@@ -52,15 +63,60 @@ function GithubIcon() {
   );
 }
 
-function VoiceSelect({ value, voices, favorites, onChange }) {
+const ENGINE_SETUP = {
+  piper: {
+    folder: 'servers/piper/',
+    command: 'npm run setup',
+    what: 'to install Piper, a voice, and the tray.',
+    anchor: 'piper-server',
+  },
+  kokoro: {
+    folder: 'servers/kokoro/',
+    command: './setup.sh && ./install-service.sh',
+    what: 'in WSL or Linux to download the Kokoro model and run it as a service.',
+    anchor: 'kokoro-server',
+  },
+};
+
+function statusText(online) {
+  if (online === null || online === undefined) return 'checking…';
+  return online ? 'online' : 'offline';
+}
+
+function EngineSelect({ value, engineStatus, onChange }) {
+  return (
+    <select className="form-select profile-engine-sel" value={value} onChange={(event) => onChange(event.target.value)}>
+      {ENGINE_IDS.map((id) => (
+        <option key={id} value={id}>
+          {ENGINES[id].label}{ENGINES[id].local ? ` (${statusText(engineStatus[id])})` : ''}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function VoiceSelect({ engine, value, voices, favorites, online, defaultVoice, onChange }) {
   const sorted = useMemo(() => [
     ...voices.filter((voice) => favorites.includes(voice)).sort(),
     ...voices.filter((voice) => !favorites.includes(voice)).sort(),
   ], [voices, favorites]);
 
+  if (engine === 'browser') {
+    return (
+      <select className="form-select profile-voice-sel" value="" disabled>
+        <option value="">Chrome default voice</option>
+      </select>
+    );
+  }
+
+  // A saved voice the engine doesn't list right now (engine offline, or the
+  // voice was removed) stays selectable so editing other fields never drops it.
+  const missing = value && !voices.includes(value);
+  const defaultLabel = defaultVoice ? `Default voice (${formatVoiceName(defaultVoice)})` : 'Default voice';
   return (
     <select className="form-select profile-voice-sel" value={value || ''} onChange={(event) => onChange(event.target.value)}>
-      <option value="">Chrome default voice</option>
+      <option value="">{online === false ? `${defaultLabel}, ${engineLabel(engine)} offline` : defaultLabel}</option>
+      {missing && <option value={value}>{formatVoiceName(value)} (not available now)</option>}
       {sorted.map((voice) => (
         <option key={voice} value={voice}>
           {favorites.includes(voice) ? '★ ' : ''}{formatVoiceName(voice)}
@@ -68,6 +124,10 @@ function VoiceSelect({ value, voices, favorites, onChange }) {
       ))}
     </select>
   );
+}
+
+function emptyEngineMap(value) {
+  return Object.fromEntries(LOCAL_ENGINE_IDS.map((id) => [id, typeof value === 'function' ? value() : value]));
 }
 
 function Modal({ modal, onConfirm, onCancel }) {
@@ -91,17 +151,20 @@ function OptionsApp() {
   const [version, setVersion] = useState('');
   const [profiles, setProfiles] = useState([]);
   const [activeId, setActiveId] = useState('');
-  const [favorites, setFavorites] = useState([]);
+  const [favoritesByEngine, setFavoritesByEngine] = useState(() => emptyEngineMap(() => []));
   const [deletedVoices, setDeletedVoices] = useState([]);
   const [favsOnly, setFavsOnly] = useState(false);
   const [fallback, setFallback] = useState(true);
-  const [voices, setVoices] = useState([]);
+  const [voicesByEngine, setVoicesByEngine] = useState(() => emptyEngineMap(() => []));
+  const [defaultVoiceByEngine, setDefaultVoiceByEngine] = useState(() => emptyEngineMap(''));
   const [voiceSizes, setVoiceSizes] = useState({});
   const [voiceDir, setVoiceDir] = useState('');
-  const [voiceLoadError, setVoiceLoadError] = useState('');
-  const [serverOnline, setServerOnline] = useState(false);
+  const [voiceLoadError, setVoiceLoadError] = useState(() => emptyEngineMap(''));
+  const [engineStatus, setEngineStatus] = useState(() => emptyEngineMap(null));
+  const [voicesEngine, setVoicesEngine] = useState('piper');
   const [createOpen, setCreateOpen] = useState(false);
-  const [createProfile, setCreateProfile] = useState({ name: '', voice: '', rate: 1.0, volume: 1.0 });
+  const blankProfile = { name: '', engine: 'piper', voice: '', rate: 1.0, volume: 1.0 };
+  const [createProfile, setCreateProfile] = useState(blankProfile);
   const [editingId, setEditingId] = useState('');
   const [editDrafts, setEditDrafts] = useState({});
   const [modal, setModal] = useState(null);
@@ -115,7 +178,7 @@ function OptionsApp() {
     const data = {
       profiles,
       activeId,
-      favorites,
+      favoritesByEngine,
       deletedVoices,
       favsOnly,
       fallback,
@@ -124,7 +187,7 @@ function OptionsApp() {
     chrome.storage.local.set({
       profiles: data.profiles,
       activeId: data.activeId,
-      favorites: data.favorites,
+      favoritesByEngine: data.favoritesByEngine,
       deletedVoices: data.deletedVoices,
       favsOnly: data.favsOnly,
       fallback: data.fallback,
@@ -166,63 +229,64 @@ function OptionsApp() {
     window.location.hash = nextTab;
   }
 
-  async function checkServerStatus() {
+  async function checkEngineStatus(engine) {
+    let ok = false;
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 2500);
-      const res = await fetch(`${PIPER_BASE_URL}/health`, { signal: ctrl.signal });
+      const res = await fetch(`${engineBaseUrl(engine)}/health`, { signal: ctrl.signal });
       clearTimeout(timer);
-      setServerOnline(res.ok);
-      return res.ok;
+      ok = res.ok;
     } catch (_) {
-      setServerOnline(false);
-      return false;
+      ok = false;
     }
+    setEngineStatus((prev) => ({ ...prev, [engine]: ok }));
+    return ok;
   }
 
-  async function fetchVoices(forceStatus = false) {
-    const online = forceStatus ? await checkServerStatus() : serverOnline || await checkServerStatus();
+  // Loads one engine's voice list. An offline engine keeps its last list (so
+  // saved profile voices still show) and reports no error: the offline banner
+  // already says what's wrong.
+  async function fetchVoices(engine) {
+    const online = await checkEngineStatus(engine);
     if (!online) {
-      setVoiceLoadError('');
+      setVoiceLoadError((prev) => ({ ...prev, [engine]: '' }));
       return;
     }
     try {
-      const res = await fetch(`${PIPER_BASE_URL}/voices`);
+      const res = await fetch(`${engineBaseUrl(engine)}/voices`);
       if (!res.ok) throw new Error(`Server responded ${res.status}`);
       const data = await res.json();
-      setVoices(data.voices || []);
-      setVoiceSizes(data.sizes || {});
-      setVoiceDir(data.voiceDir || '');
-      setVoiceLoadError('');
+      setVoicesByEngine((prev) => ({ ...prev, [engine]: Array.isArray(data.voices) ? data.voices : [] }));
+      setDefaultVoiceByEngine((prev) => ({ ...prev, [engine]: data.defaultVoice || '' }));
+      if (engine === 'piper') {
+        setVoiceSizes(data.sizes || {});
+        setVoiceDir(data.voiceDir || '');
+      }
+      setVoiceLoadError((prev) => ({ ...prev, [engine]: '' }));
     } catch (error) {
-      setVoices([]);
-      setVoiceSizes({});
-      setVoiceDir('');
-      setVoiceLoadError(`Failed to load voices: ${error.message}`);
+      setVoicesByEngine((prev) => ({ ...prev, [engine]: [] }));
+      if (engine === 'piper') {
+        setVoiceSizes({});
+        setVoiceDir('');
+      }
+      setVoiceLoadError((prev) => ({ ...prev, [engine]: `Failed to load ${engineLabel(engine)} voices: ${error.message}` }));
     }
+  }
+
+  function fetchAllVoices() {
+    return Promise.all(LOCAL_ENGINE_IDS.map((engine) => fetchVoices(engine)));
   }
 
   useEffect(() => {
     async function init() {
       setVersion(`v${chrome.runtime.getManifest().version}`);
 
-      const rawKeys = await chrome.storage.local.get(['fallback', 'fallbackToBrowser']);
-      if (rawKeys.fallbackToBrowser !== undefined && rawKeys.fallback === undefined) {
-        await chrome.storage.local.set({ fallback: rawKeys.fallbackToBrowser });
-        await chrome.storage.local.remove('fallbackToBrowser');
-      }
+      // Upgrades settings saved by Piper TTS 1.0.x (see migrateSettings).
+      const stored = await runSettingsMigration(chrome.storage.local);
 
-      const stored = await chrome.storage.local.get({
-        profiles: [],
-        activeId: '',
-        favorites: [],
-        deletedVoices: [],
-        favsOnly: false,
-        fallback: true,
-      });
-
-      let nextProfiles = stored.profiles;
-      let nextActiveId = stored.activeId;
+      let nextProfiles = Array.isArray(stored.profiles) ? stored.profiles.map(normalizeProfile) : [];
+      let nextActiveId = stored.activeId || '';
       if (nextProfiles.length === 0) {
         const profile = defaultProfile();
         nextProfiles = [profile];
@@ -230,20 +294,19 @@ function OptionsApp() {
         await chrome.storage.local.set({ profiles: nextProfiles, activeId: nextActiveId });
       }
 
-      const def = nextProfiles.find((profile) => profile.id === 'default' && profile.name === 'Default');
-      if (def) {
-        def.name = 'Profile 1';
-        await chrome.storage.local.set({ profiles: nextProfiles });
-      }
-
+      const resolvedActiveId = nextProfiles.some((profile) => profile.id === nextActiveId) ? nextActiveId : nextProfiles[0].id;
       setProfiles(nextProfiles);
-      setActiveId(nextProfiles.some((profile) => profile.id === nextActiveId) ? nextActiveId : nextProfiles[0].id);
-      setFavorites(stored.favorites);
-      setDeletedVoices(stored.deletedVoices);
-      setFavsOnly(stored.favsOnly);
-      setFallback(stored.fallback);
-      const online = await checkServerStatus();
-      if (online) await fetchVoices(true);
+      setActiveId(resolvedActiveId);
+      setFavoritesByEngine({
+        piper: favoritesFor(stored.favoritesByEngine, 'piper'),
+        kokoro: favoritesFor(stored.favoritesByEngine, 'kokoro'),
+      });
+      setDeletedVoices(Array.isArray(stored.deletedVoices) ? stored.deletedVoices : []);
+      setFavsOnly(stored.favsOnly === true);
+      setFallback(stored.fallback !== false);
+      const activeEngine = nextProfiles.find((profile) => profile.id === resolvedActiveId)?.engine;
+      if (LOCAL_ENGINE_IDS.includes(activeEngine)) setVoicesEngine(activeEngine);
+      await fetchAllVoices();
       await refreshChromeCommands();
     }
     init();
@@ -269,8 +332,8 @@ function OptionsApp() {
   }, []);
 
   useEffect(() => {
-    if (tab === 'voices' && voices.length === 0) fetchVoices();
-  }, [tab]);
+    if (tab === 'voices') fetchVoices(voicesEngine);
+  }, [tab, voicesEngine]);
 
   useEffect(() => {
     if (createOpen) createNameRef.current?.focus();
@@ -297,15 +360,16 @@ function OptionsApp() {
       await showAlert('A profile with this name already exists.');
       return;
     }
-    const profile = {
+    const profile = normalizeProfile({
       id: uuid(),
       name,
+      engine: createProfile.engine,
       voice: createProfile.voice,
-      rate: Number.parseFloat(createProfile.rate),
-      volume: Number.parseFloat(createProfile.volume),
-    };
+      rate: createProfile.rate,
+      volume: createProfile.volume,
+    });
     updateProfiles([...profiles, profile], profiles.length === 0 ? profile.id : activeId);
-    setCreateProfile({ name: '', voice: '', rate: 1.0, volume: 1.0 });
+    setCreateProfile(blankProfile);
     setCreateOpen(false);
   }
 
@@ -325,6 +389,7 @@ function OptionsApp() {
       ...editDrafts,
       [profile.id]: {
         name: profile.name,
+        engine: profile.engine,
         voice: profile.voice,
         rate: profile.rate ?? 1.0,
         volume: profile.volume ?? 1.0,
@@ -342,7 +407,7 @@ function OptionsApp() {
     }
     updateProfiles(profiles.map((profile) =>
       profile.id === profileId
-        ? { ...profile, name, voice: draft.voice, rate: Number.parseFloat(draft.rate), volume: Number.parseFloat(draft.volume) }
+        ? normalizeProfile({ ...profile, name, engine: draft.engine, voice: draft.voice, rate: draft.rate, volume: draft.volume })
         : profile,
     ));
     setEditingId('');
@@ -355,31 +420,36 @@ function OptionsApp() {
     });
   }
 
-  async function toggleFavorite(filename) {
-    let nextFavorites;
-    if (favorites.includes(filename)) {
-      nextFavorites = favorites.filter((favorite) => favorite !== filename);
+  async function toggleFavorite(engine, voice) {
+    const current = favoritesFor(favoritesByEngine, engine);
+    let nextList;
+    if (current.includes(voice)) {
+      nextList = current.filter((favorite) => favorite !== voice);
     } else {
-      if (favorites.length >= MAX_FAVORITES) {
-        await showAlert(`You've reached the ${MAX_FAVORITES}-favorite limit.\n\nUnstar a voice to make room for another.`);
+      if (current.length >= MAX_FAVORITES) {
+        await showAlert(`You've reached the ${MAX_FAVORITES}-favorite limit for ${engineLabel(engine)}.\n\nUnstar a voice to make room for another.`);
         return;
       }
-      nextFavorites = [...favorites, filename];
+      nextList = [...current, voice];
     }
-    setFavorites(nextFavorites);
-    persist({ favorites: nextFavorites });
+    const next = { ...favoritesByEngine, [engine]: nextList };
+    setFavoritesByEngine(next);
+    persist({ favoritesByEngine: next });
+  }
+
+  function testKey(settings) {
+    return `${settings.engine}:${settings.voice || ''}`;
   }
 
   function testVoice(settings = {}) {
-    const testSettings = {
-      voice: settings.voice || '',
-      rate: Number.parseFloat(settings.rate ?? 1.0),
-      volume: Number.parseFloat(settings.volume ?? 1.0),
-    };
-    setTestingVoice(testSettings.voice || '__default__');
+    const testSettings = normalizeProfile({ ...settings, name: 'Test' });
+    setTestingVoice(testKey(testSettings));
+    const voiceName = testSettings.engine === 'browser'
+      ? 'Chrome default voice'
+      : formatVoiceName(testSettings.voice, `${engineLabel(testSettings.engine)} default voice`);
     chrome.runtime.sendMessage({
       type: 'test-voice',
-      text: `This is a test of the voice ${formatVoiceName(testSettings.voice)}.`,
+      text: `This is a test of the voice ${voiceName}.`,
       settings: testSettings,
     }, (response) => {
       setTestingVoice('');
@@ -388,7 +458,11 @@ function OptionsApp() {
         showAlert(`Extension error: ${runtimeErr.message}`);
         return;
       }
-      if (response && !response.ok) showAlert(`Test failed: ${response.error || 'Unknown error'}`);
+      if (response && !response.ok) {
+        showAlert(`Test failed: ${response.error || 'Unknown error'}`);
+      } else if (response?.fellBack) {
+        showAlert(`${engineLabel(testSettings.engine)} is offline, so the browser voice played instead.\n\nStart the ${engineLabel(testSettings.engine)} server to hear this voice (see Settings).`);
+      }
     });
   }
 
@@ -405,14 +479,18 @@ function OptionsApp() {
         { filename, displayName: formatVoiceName(filename), deletedAt: new Date().toLocaleDateString() },
         ...deletedVoices.filter((item) => item.filename !== filename),
       ];
-      const nextFavorites = favorites.filter((favorite) => favorite !== filename);
-      const nextProfiles = profiles.map((profile) => profile.voice === filename ? { ...profile, voice: '' } : profile);
-      const nextVoices = voices.filter((voice) => voice !== filename);
+      const nextFavorites = {
+        ...favoritesByEngine,
+        piper: favoritesFor(favoritesByEngine, 'piper').filter((favorite) => favorite !== filename),
+      };
+      const nextProfiles = profiles.map((profile) =>
+        profile.engine === 'piper' && profile.voice === filename ? { ...profile, voice: '' } : profile,
+      );
       setDeletedVoices(nextDeleted);
-      setFavorites(nextFavorites);
+      setFavoritesByEngine(nextFavorites);
       setProfiles(nextProfiles);
-      setVoices(nextVoices);
-      persist({ deletedVoices: nextDeleted, favorites: nextFavorites, profiles: nextProfiles });
+      setVoicesByEngine((prev) => ({ ...prev, piper: prev.piper.filter((voice) => voice !== filename) }));
+      persist({ deletedVoices: nextDeleted, favoritesByEngine: nextFavorites, profiles: nextProfiles });
     } catch (error) {
       await showAlert(`Delete failed: ${error.message}`);
     }
@@ -422,13 +500,32 @@ function OptionsApp() {
     fetch(`${PIPER_BASE_URL}/voices/open-folder`, { method: 'POST' }).catch(() => {});
   }
 
+  const viewFavorites = favoritesFor(favoritesByEngine, voicesEngine);
   const visibleVoices = useMemo(() => {
-    const pool = favsOnly ? voices.filter((voice) => favorites.includes(voice)) : voices;
+    const all = voicesByEngine[voicesEngine] || [];
+    const pool = favsOnly ? all.filter((voice) => viewFavorites.includes(voice)) : all;
     return [
-      ...pool.filter((voice) => favorites.includes(voice)).sort(),
-      ...pool.filter((voice) => !favorites.includes(voice)).sort(),
+      ...pool.filter((voice) => viewFavorites.includes(voice)).sort(),
+      ...pool.filter((voice) => !viewFavorites.includes(voice)).sort(),
     ];
-  }, [voices, favorites, favsOnly]);
+  }, [voicesByEngine, voicesEngine, viewFavorites, favsOnly]);
+  const viewOnline = engineStatus[voicesEngine];
+
+  // The voice picker for a profile form (create or edit).
+  function voicePicker(draft, onChange) {
+    const engine = draft.engine || 'browser';
+    return (
+      <VoiceSelect
+        engine={engine}
+        value={draft.voice}
+        voices={voicesByEngine[engine] || []}
+        favorites={favoritesFor(favoritesByEngine, engine)}
+        online={engineStatus[engine]}
+        defaultVoice={defaultVoiceByEngine[engine]}
+        onChange={onChange}
+      />
+    );
+  }
 
   return (
     <div className="page">
@@ -436,12 +533,20 @@ function OptionsApp() {
         <img className="page-icon" src="icons/icon48.png" alt="" />
         <div className="page-header-body">
           <div className="page-header-row">
-            <h1 className="page-title">Piper TTS</h1>
+            <h1 className="page-title">{APP_NAME}</h1>
             <span className="page-version">{version}</span>
-            <span className={`server-badge ${serverOnline ? 'online' : 'offline'}`}>{serverOnline ? 'Piper Online ✓' : 'Piper Offline ✗'}</span>
+            {LOCAL_ENGINE_IDS.map((engine) => {
+              const online = engineStatus[engine];
+              const state = online === null ? '' : online ? 'online' : 'offline';
+              return (
+                <span key={engine} className={`server-badge ${state}`} title={ENGINES[engine].baseUrl}>
+                  {engineLabel(engine)} {online === null ? '…' : online ? 'online ✓' : 'offline ✗'}
+                </span>
+              );
+            })}
           </div>
           <p className="page-tagline">
-            Reads selected text aloud using a fully local <a className="link" href="https://github.com/rhasspy/piper" target="_blank">Piper TTS</a> server — no cloud, no API keys.
+            Reads selected text aloud with local <a className="link" href="https://github.com/rhasspy/piper" target="_blank">Piper</a> or <a className="link" href="https://huggingface.co/hexgrad/Kokoro-82M" target="_blank">Kokoro</a> voices on your own machine. No cloud, no API keys.
           </p>
         </div>
       </header>
@@ -464,14 +569,15 @@ function OptionsApp() {
                 await showAlert(`You've reached the ${MAX_PROFILES}-profile limit.\n\nDelete an existing profile to make room for a new one.`);
                 return;
               }
+              setCreateProfile({ ...blankProfile, engine: activeProfile?.engine || 'piper' });
               setCreateOpen(true);
             }}>＋ New Profile</button>
           </div>
           <p className="panel-blurb">
-            A <strong>profile</strong> is a named preset that stores a voice, speed, and volume.
-            Switch between profiles in the popup using the arrow buttons — useful for keeping
-            separate settings for different content types, like a fast voice for articles and
-            a slower one for technical material. You can have up to 5 profiles.
+            A <strong>profile</strong> is a named preset that stores an engine (Piper, Kokoro, or
+            the browser voice), a voice, speed, and volume. Switch between profiles in the popup
+            using the arrow buttons, for example a fast Piper voice for articles and a natural
+            Kokoro voice for long reads. You can have up to 5 profiles.
           </p>
 
           {createOpen && (
@@ -480,8 +586,10 @@ function OptionsApp() {
               <div className="form-grid">
                 <label className="form-label">Name</label>
                 <input ref={createNameRef} className="form-input" type="text" placeholder="e.g. Audiobooks" maxLength={40} value={createProfile.name} onChange={(event) => setCreateProfile({ ...createProfile, name: event.target.value })} />
+                <label className="form-label">Engine</label>
+                <EngineSelect value={createProfile.engine} engineStatus={engineStatus} onChange={(engine) => setCreateProfile({ ...createProfile, engine, voice: '' })} />
                 <label className="form-label">Voice</label>
-                <VoiceSelect value={createProfile.voice} voices={voices} favorites={favorites} onChange={(voice) => setCreateProfile({ ...createProfile, voice })} />
+                {voicePicker(createProfile, (voice) => setCreateProfile({ ...createProfile, voice }))}
                 <label className="form-label">Speed</label>
                 <div className="slider-inline">
                   <input className="slider" type="range" min="0.5" max="2.5" step="0.1" value={createProfile.rate} onChange={(event) => setCreateProfile({ ...createProfile, rate: event.target.value })} />
@@ -497,7 +605,7 @@ function OptionsApp() {
                 <button className="btn btn-primary" onClick={createNewProfile}>Save Profile</button>
                 <button className="btn btn-ghost" onClick={() => {
                   setCreateOpen(false);
-                  setCreateProfile({ name: '', voice: '', rate: 1.0, volume: 1.0 });
+                  setCreateProfile(blankProfile);
                 }}>Cancel</button>
               </div>
             </div>
@@ -517,7 +625,7 @@ function OptionsApp() {
                     </button>
                     <div className="profile-card-info">
                       <span className="profile-card-name">{profile.name}</span>
-                      <span className="profile-card-meta">{formatVoiceName(profile.voice)}  ·  {fmt(profile.rate)}×  ·  vol {fmt(profile.volume)}</span>
+                      <span className="profile-card-meta">{describeProfileVoice(profile)}  ·  {fmt(profile.rate)}×  ·  vol {fmt(profile.volume)}</span>
                     </div>
                     <div className="profile-card-btns">
                       <button className="btn-icon btn-icon-edit" title="Edit profile" onClick={() => editing ? setEditingId('') : beginEdit(profile)}><IconPencil /></button>
@@ -530,8 +638,10 @@ function OptionsApp() {
                       <div className="form-grid">
                         <label className="form-label">Name</label>
                         <input className="form-input" type="text" maxLength={40} value={draft.name} onChange={(event) => updateDraft(profile.id, { name: event.target.value })} />
+                        <label className="form-label">Engine</label>
+                        <EngineSelect value={draft.engine || 'browser'} engineStatus={engineStatus} onChange={(engine) => updateDraft(profile.id, { engine, voice: '' })} />
                         <label className="form-label">Voice</label>
-                        <VoiceSelect value={draft.voice} voices={voices} favorites={favorites} onChange={(voice) => updateDraft(profile.id, { voice })} />
+                        {voicePicker(draft, (voice) => updateDraft(profile.id, { voice }))}
                         <label className="form-label">Speed</label>
                         <div className="slider-inline">
                           <input className="slider" type="range" min="0.5" max="2.5" step="0.1" value={draft.rate} onChange={(event) => updateDraft(profile.id, { rate: event.target.value })} />
@@ -546,7 +656,7 @@ function OptionsApp() {
                       <div className="profile-edit-actions">
                         <button className="btn btn-primary btn-sm" onClick={() => saveEdit(profile.id)}>Save</button>
                         <button className="btn btn-ghost btn-sm" onClick={() => setEditingId('')}>Cancel</button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => testVoice(draft)}>{testingVoice === (draft.voice || '__default__') ? 'Playing…' : '▶ Test'}</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => testVoice(draft)}>{testingVoice === testKey(normalizeProfile(draft)) ? 'Playing…' : '▶ Test'}</button>
                       </div>
                     </div>
                   )}
@@ -559,9 +669,25 @@ function OptionsApp() {
 
       {tab === 'voices' && (
         <section className="tab-panel" role="tabpanel">
+          <div className="engine-switch" role="tablist" aria-label="Engine">
+            {LOCAL_ENGINE_IDS.map((engine) => (
+              <button
+                key={engine}
+                role="tab"
+                aria-selected={voicesEngine === engine}
+                className={`engine-switch-btn ${voicesEngine === engine ? 'active' : ''}`}
+                onClick={() => setVoicesEngine(engine)}
+              >
+                <span className={`engine-dot ${engineStatus[engine] === null ? '' : engineStatus[engine] ? 'online' : 'offline'}`} />
+                {engineLabel(engine)}
+                <span className="engine-switch-count">{(voicesByEngine[engine] || []).length}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="panel-toolbar">
-            <h2 className="panel-heading">Installed Voices</h2>
-            <span className="favs-count">{favorites.length} / {MAX_FAVORITES} favorites</span>
+            <h2 className="panel-heading">{engineLabel(voicesEngine)} voices</h2>
+            <span className="favs-count">{viewFavorites.length} / {MAX_FAVORITES} favorites</span>
             <label className="toggle-label">
               <input type="checkbox" checked={favsOnly} onChange={(event) => {
                 setFavsOnly(event.target.checked);
@@ -571,8 +697,13 @@ function OptionsApp() {
             </label>
           </div>
 
-          {!serverOnline && <div className="voices-offline-banner">⚠ Piper server is offline — start the server to manage voices.</div>}
-          {voiceDir && (
+          {viewOnline === false && (
+            <div className="voices-offline-banner">
+              ⚠ The {engineLabel(voicesEngine)} server is offline at <code>{ENGINES[voicesEngine].baseUrl}</code>.
+              {' '}Start it to {voicesEngine === 'piper' ? 'manage' : 'list'} voices; profiles that use it read with the browser voice until then (if the fallback is on).
+            </div>
+          )}
+          {voicesEngine === 'piper' && voiceDir && (
             <div className="voices-folder-bar">
               <span className="voices-folder-label">Saved to</span>
               <code className="voices-folder-path">{voiceDir}</code>
@@ -582,24 +713,37 @@ function OptionsApp() {
 
           <div className="voice-grid">
             {visibleVoices.length === 0 && (
-              <p className="no-items">{voiceLoadError || (favsOnly ? 'No favourites yet. Star a voice to add it here.' : serverOnline ? 'No voices installed. Download voices and place them in piper/voices/.' : 'Start the Piper server to see installed voices.')}</p>
+              <p className="no-items">{voiceLoadError[voicesEngine] || (favsOnly
+                ? 'No favourites yet. Star a voice to add it here.'
+                : viewOnline
+                  ? (voicesEngine === 'piper' ? 'No voices installed. Download voices and place them in piper/voices/.' : 'The Kokoro server reported no voices.')
+                  : `Start the ${engineLabel(voicesEngine)} server to see its voices.`)}</p>
             )}
             {visibleVoices.map((voice) => {
-              const isFav = favorites.includes(voice);
-              const quality = qualityFromFilename(voice);
+              const isFav = viewFavorites.includes(voice);
+              const quality = voicesEngine === 'piper' ? qualityFromFilename(voice) : null;
+              const kokoro = voicesEngine === 'kokoro' ? kokoroVoiceDetails(voice) : null;
+              const isDefault = voice === defaultVoiceByEngine[voicesEngine];
+              const settings = { engine: voicesEngine, voice };
               return (
                 <div key={voice} className="voice-card" data-voice={voice}>
-                  <button className={`voice-fav-btn ${isFav ? 'is-fav' : ''}`} title={isFav ? 'Remove from favorites' : 'Add to favorites'} onClick={() => toggleFavorite(voice)}>{isFav ? '★' : '☆'}</button>
+                  <button className={`voice-fav-btn ${isFav ? 'is-fav' : ''}`} title={isFav ? 'Remove from favorites' : 'Add to favorites'} onClick={() => toggleFavorite(voicesEngine, voice)}>{isFav ? '★' : '☆'}</button>
                   <div className="voice-card-info">
                     <span className="voice-card-name">
-                      {isFav ? '★ ' : ''}{formatVoiceName(voice)}
+                      {kokoro ? kokoro.name : formatVoiceName(voice)}
                       {quality && <span className={`quality-badge quality-${quality}`}>{quality === 'x_low' ? 'x-low' : quality}</span>}
+                      {kokoro && <span className="lang-badge">{kokoro.language}</span>}
+                      {isDefault && <span className="lang-badge lang-badge-default">default</span>}
                     </span>
-                    <span className="voice-card-file">{formatBytes(voiceSizes[voice]) ? `${voice}  ·  ${formatBytes(voiceSizes[voice])}` : voice}</span>
+                    <span className="voice-card-file">
+                      {voicesEngine === 'piper'
+                        ? (formatBytes(voiceSizes[voice]) ? `${voice}  ·  ${formatBytes(voiceSizes[voice])}` : voice)
+                        : `${voice}  ·  ${kokoro ? kokoro.gender : 'voice'}`}
+                    </span>
                   </div>
                   <div className="voice-card-btns">
-                    <button className="btn btn-ghost btn-sm" onClick={() => testVoice({ voice })}>{testingVoice === voice ? 'Playing…' : '▶ Test'}</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => deleteVoice(voice)}>Delete</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => testVoice(settings)}>{testingVoice === testKey(settings) ? 'Playing…' : '▶ Test'}</button>
+                    {voicesEngine === 'piper' && <button className="btn btn-danger btn-sm" onClick={() => deleteVoice(voice)}>Delete</button>}
                   </div>
                 </div>
               );
@@ -607,10 +751,12 @@ function OptionsApp() {
           </div>
 
           <div className="voices-footer">
-            <a className="link-external" href="https://huggingface.co/rhasspy/piper-voices/tree/main/en" target="_blank">Browse &amp; download more voices on HuggingFace ↗</a>
+            {voicesEngine === 'piper'
+              ? <a className="link-external" href="https://huggingface.co/rhasspy/piper-voices/tree/main/en" target="_blank">Browse &amp; download more Piper voices on HuggingFace ↗</a>
+              : <a className="link-external" href="https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md" target="_blank">About the Kokoro voices and their quality grades ↗</a>}
           </div>
 
-          {deletedVoices.length > 0 && (
+          {voicesEngine === 'piper' && deletedVoices.length > 0 && (
             <details className="deleted-section">
               <summary className="deleted-summary">
                 <span>Deleted voices</span>
@@ -640,30 +786,38 @@ function OptionsApp() {
                 persist({ fallback: event.target.checked });
               }} />
               <div>
-                <span className="setting-label">Browser TTS fallback</span>
-                <span className="setting-desc">When Piper is offline or generation fails, use the browser's built-in voice instead of failing silently.</span>
+                <span className="setting-label">Browser voice fallback</span>
+                <span className="setting-desc">When a profile's engine (Piper or Kokoro) is offline or fails, read with the browser's built-in voice instead of staying silent.</span>
               </div>
             </label>
           </div>
-          <div className="settings-group">
-            <h3 className="settings-group-title">Piper Server</h3>
-            <div className="setting-row setting-row-info">
-              <span className="setting-label">Address</span>
-              <code className="setting-code">http://127.0.0.1:7477</code>
-            </div>
-            <div className="setting-row setting-row-info">
-              <span className="setting-label">Status</span>
-              <span style={{ color: serverOnline ? '#a6e3a1' : '#f38ba8' }}>{serverOnline ? 'Online ✓' : 'Offline ✗'}</span>
-            </div>
-            <div className="setting-row setting-row-info">
-              <span className="setting-label">Set up</span>
-              <span className="setting-desc">
-                {serverOnline ? 'Manage the server from the tray (green/red status dot). ' : 'No local server detected. '}
-                Run <code className="setting-code">npm run setup</code> in <code className="setting-code">servers/piper/</code> to install Piper, a voice, and the tray.{' '}
-                <a href="https://github.com/n8watkins/piper-tts#quick-setup-one-command" target="_blank" rel="noreferrer" style={{ color: '#cba6f7' }}>Setup guide ↗</a>
-              </span>
-            </div>
-          </div>
+          {LOCAL_ENGINE_IDS.map((engine) => {
+            const setup = ENGINE_SETUP[engine];
+            const online = engineStatus[engine];
+            return (
+              <div className="settings-group" key={engine}>
+                <h3 className="settings-group-title">{engineLabel(engine)} server</h3>
+                <div className="setting-row setting-row-info">
+                  <span className="setting-label">Address</span>
+                  <code className="setting-code">{ENGINES[engine].baseUrl}</code>
+                </div>
+                <div className="setting-row setting-row-info">
+                  <span className="setting-label">Status</span>
+                  <span className={`setting-status ${online === null ? '' : online ? 'online' : 'offline'}`}>{online === null ? 'Checking…' : online ? 'Online ✓' : 'Offline ✗'}</span>
+                  <button className="btn btn-ghost btn-sm setting-recheck" onClick={() => fetchVoices(engine)}>Check again</button>
+                </div>
+                <div className="setting-row setting-row-info">
+                  <span className="setting-label">Set up</span>
+                  <span className="setting-desc">
+                    {ENGINES[engine].blurb}{' '}
+                    {online ? '' : 'No server detected. '}
+                    Run <code className="setting-code">{setup.command}</code> in <code className="setting-code">{setup.folder}</code> {setup.what}{' '}
+                    <a href={`https://github.com/n8watkins/piper-tts#${setup.anchor}`} target="_blank" rel="noreferrer" className="setting-link">Setup guide ↗</a>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
           <div className="settings-group">
             <h3 className="settings-group-title">Keyboard Shortcuts</h3>
             <p className="setting-desc settings-shortcut-disclaimer">
@@ -701,20 +855,20 @@ function OptionsApp() {
             <h4 className="credits-section-title">How It Works</h4>
             <ol className="how-it-works-list">
               <li><span className="flow-step">1</span><div><strong>Highlight text</strong> on any webpage and right-click → <em>Read selected text aloud</em>.</div></li>
-              <li><span className="flow-step">2</span><div>The extension's <strong>background service worker</strong> checks if the local Piper server is reachable at <code>http://127.0.0.1:7477</code>.</div></li>
-              <li><span className="flow-step">3</span><div>The text is split into sentence chunks and sent to the <strong>local Node.js server</strong>, which calls <code>piper.exe</code> and streams back WAV audio.</div></li>
+              <li><span className="flow-step">2</span><div>The extension's <strong>background service worker</strong> checks that the active profile's engine is reachable: <strong>Piper</strong> at <code>http://127.0.0.1:7477</code> or <strong>Kokoro</strong> at <code>http://127.0.0.1:7478</code>.</div></li>
+              <li><span className="flow-step">3</span><div>The text is split into sentence chunks and sent to that <strong>local server</strong> (Node.js running <code>piper.exe</code>, or Python running Kokoro-82M), which sends back WAV audio.</div></li>
               <li><span className="flow-step">4</span><div>An <strong>offscreen document</strong> receives each chunk and plays it through the Web Audio API — Chrome's Manifest V3 service workers can't play audio directly.</div></li>
-              <li><span className="flow-step">5</span><div>If Piper is offline or generation fails and <em>Browser TTS fallback</em> is on (Settings), the browser's built-in voice is used instead.</div></li>
+              <li><span className="flow-step">5</span><div>If the engine is offline or generation fails and <em>Browser voice fallback</em> is on (Settings), the browser's built-in voice is used instead, and the page shows a short note saying so.</div></li>
               <li><span className="flow-step">6</span><div>Use <strong>keyboard shortcuts</strong> across tabs: <kbd>Alt+Shift+R</kbd> to read selected text or stop playback, and <kbd>Alt+Shift+D</kbd> to pause/resume.</div></li>
             </ol>
           </div>
           <div className="credits-section">
             <h4 className="credits-section-title">Profiles</h4>
-            <p className="credits-body">Each <strong>profile</strong> is a named preset storing a voice, speed, and volume. Create multiple profiles — for example, a fast voice for articles and a slower one for technical content — and switch between them in the popup with the arrow buttons.</p>
+            <p className="credits-body">Each <strong>profile</strong> is a named preset storing an engine, a voice, speed, and volume. Create multiple profiles, for example a fast Piper voice for articles and a natural Kokoro voice for long reads, and switch between them in the popup with the arrow buttons.</p>
           </div>
           <div className="credits-section">
             <h4 className="credits-section-title">Setup</h4>
-            <p className="credits-body">Full installation instructions — including how to download Piper, add local voice models, run the localhost server, and load the extension — are in the project README.</p>
+            <p className="credits-body">Full installation instructions, including how to set up the Piper and Kokoro servers, add voices, and load the extension, are in the project README.</p>
             <a className="btn btn-primary credits-readme-btn" href="https://github.com/n8watkins/piper-tts#readme" target="_blank">View README &amp; Setup Guide ↗</a>
           </div>
         </section>
@@ -727,12 +881,14 @@ function OptionsApp() {
             <div className="credits-deps">
               <a className="dep-card" href="https://github.com/rhasspy/piper" target="_blank"><span className="dep-name">Piper TTS</span><span className="dep-desc">Fast, local neural text-to-speech by rhasspy</span></a>
               <a className="dep-card" href="https://huggingface.co/rhasspy/piper-voices/tree/main/en" target="_blank"><span className="dep-name">Piper Voices</span><span className="dep-desc">Free English voice models on HuggingFace</span></a>
+              <a className="dep-card" href="https://huggingface.co/hexgrad/Kokoro-82M" target="_blank"><span className="dep-name">Kokoro-82M</span><span className="dep-desc">Natural-sounding open-weight TTS model by hexgrad (Apache 2.0)</span></a>
+              <a className="dep-card" href="https://github.com/thewh1teagle/kokoro-onnx" target="_blank"><span className="dep-name">kokoro-onnx</span><span className="dep-desc">Runs Kokoro with ONNX Runtime, by thewh1teagle</span></a>
               <a className="dep-card" href="https://lucide.dev" target="_blank"><span className="dep-name">Lucide Icons</span><span className="dep-desc">Beautiful &amp; consistent open-source icons</span></a>
             </div>
           </div>
           <div className="credits-section">
             <h4 className="credits-section-title">Source &amp; License</h4>
-            <p className="credits-body">Piper TTS is MIT licensed and runs locally: selected text is sent to your own localhost server, which calls your installed Piper executable and voice models. No cloud service or API key is required.</p>
+            <p className="credits-body">LocalVoice is MIT licensed and runs locally: selected text is sent only to your own localhost server, which runs your installed Piper or Kokoro voices. No cloud service or API key is required.</p>
             <a className="dep-card dep-card-github" href="https://github.com/n8watkins/piper-tts" target="_blank">
               <span className="dep-card-github-icon"><GithubIcon /></span>
               <span className="dep-card-github-text"><span className="dep-name">n8watkins/piper-tts</span><span className="dep-desc">View source on GitHub</span></span>

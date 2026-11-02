@@ -1,14 +1,21 @@
 // ─── Constants ────────────────────────────────────────────────────────────────
-// PIPER_BASE_URL and defaultProfile are shared with the React UI (src/shared.js)
-// so the server URL and the seed profile can't drift between the two.
-import { PIPER_BASE_URL, defaultProfile } from "./src/shared.js";
+// Engine URLs, the seed profile, engine selection and the settings migration
+// are shared with the React UI (src/shared.js) so they can't drift apart.
+import {
+  LOCAL_ENGINE_IDS,
+  chooseEngine,
+  defaultProfile,
+  engineBaseUrl,
+  engineLabel,
+  normalizeProfile,
+  runSettingsMigration,
+} from "./src/shared.js";
 
-const PIPER_URL      = `${PIPER_BASE_URL}/tts`;
 const OFFSCREEN_URL  = "offscreen.html";
 
 async function getProfileState() {
   const state = await chrome.storage.local.get(["profiles", "activeId"]);
-  const profiles = Array.isArray(state.profiles) ? state.profiles : [];
+  const profiles = Array.isArray(state.profiles) ? state.profiles.map(normalizeProfile) : [];
   let activeId = state.activeId || "";
 
   if (profiles.length === 0) {
@@ -61,7 +68,7 @@ async function rebuildMenus() {
     id:       "stop-reading",
     title:    "Stop reading",
     contexts: ["all"],
-    visible:  _isPlayingPiper
+    visible:  _isPlaying
   });
 }
 
@@ -76,14 +83,20 @@ async function setStopMenuVisible(visible) {
   }
 }
 
-chrome.runtime.onInstalled.addListener(async () => {
-  // Migrate old fallbackToBrowser storage key to fallback (one-time, on install/update)
-  const data = await chrome.storage.local.get(["fallback", "fallbackToBrowser"]);
-  if (data.fallbackToBrowser !== undefined && data.fallback === undefined) {
-    await chrome.storage.local.set({ fallback: data.fallbackToBrowser });
-    await chrome.storage.local.remove("fallbackToBrowser");
-  }
+// Settings saved by Piper TTS 1.0.x (profiles without an engine, the single
+// favorites list, fallbackToBrowser) are upgraded in place; see
+// migrateSettings in src/shared.js. Runs on install/update and on browser
+// startup, and is idempotent.
+async function migrateAndRebuild() {
+  await runSettingsMigration(chrome.storage.local);
   await rebuildMenus();
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  migrateAndRebuild().catch(err => console.error("[LocalVoice] migration failed:", err));
+});
+chrome.runtime.onStartup?.addListener(() => {
+  migrateAndRebuild().catch(err => console.error("[LocalVoice] migration failed:", err));
 });
 
 // Rebuild whenever profiles or activeId change (popup saved new data).
@@ -116,10 +129,10 @@ async function ensureOffscreenDocument() {
 function speakWithBrowser(text, settings) {
   const effectiveSettings = settings || {};
   const generation = ++_browserSpeakGeneration;
-  _activePiperRequest = null;
+  _activeEngineRequest = null;
   chrome.tts.stop();
-  _isPlayingPiper = true;   // reuse the playing flag so popup + keyboard toggle work
-  _isPausedPiper  = false;
+  _isPlaying = true;   // reuse the playing flag so popup + keyboard toggle work
+  _isPaused  = false;
   _playbackEngine = "browser";
   _currentVolume  = Math.min(1, effectiveSettings.volume ?? 1.0); // browser TTS capped at 1
   _currentRate    = effectiveSettings.rate ?? 1.0;
@@ -141,8 +154,8 @@ function speakWithBrowser(text, settings) {
     onEvent: (e) => {
       if (generation !== _browserSpeakGeneration || _playbackEngine !== "browser") return;
       if (e.type === "end" || e.type === "interrupted" || e.type === "cancelled") {
-        _isPlayingPiper = false;
-        _isPausedPiper  = false;
+        _isPlaying = false;
+        _isPaused  = false;
         _playbackEngine = null;
         resetProgress();
         setStopMenuVisible(false);
@@ -150,8 +163,8 @@ function speakWithBrowser(text, settings) {
       }
       if (e.type === "error") {
         console.error("tts error:", e.errorMessage);
-        _isPlayingPiper = false;
-        _isPausedPiper  = false;
+        _isPlaying = false;
+        _isPaused  = false;
         _playbackEngine = null;
         resetProgress();
         setStopMenuVisible(false);
@@ -161,33 +174,42 @@ function speakWithBrowser(text, settings) {
   });
 }
 
-// ─── Piper Health Check (5-second cache) ─────────────────────────────────────
-let _piperOnlineCache = { value: false, expiresAt: 0 };
+// ─── Engine Health Checks (per engine, 5-second cache) ───────────────────────
+const _engineOnlineCache = Object.fromEntries(
+  LOCAL_ENGINE_IDS.map(id => [id, { value: false, expiresAt: 0 }])
+);
 
-async function checkPiperOnline() {
-  if (Date.now() < _piperOnlineCache.expiresAt) return _piperOnlineCache.value;
+async function checkEngineOnline(engine) {
+  const cache = _engineOnlineCache[engine];
+  const baseUrl = engineBaseUrl(engine);
+  if (!cache || !baseUrl) return false;
+  if (Date.now() < cache.expiresAt) return cache.value;
   try {
     const ctrl  = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 2500);
-    const res   = await fetch(`${PIPER_BASE_URL}/health`, { signal: ctrl.signal });
+    const res   = await fetch(`${baseUrl}/health`, { signal: ctrl.signal });
     clearTimeout(timer);
-    _piperOnlineCache = { value: res.ok, expiresAt: Date.now() + 5000 };
+    _engineOnlineCache[engine] = { value: res.ok, expiresAt: Date.now() + 5000 };
     return res.ok;
   } catch (_) {
-    _piperOnlineCache = { value: false, expiresAt: Date.now() + 2000 };
+    _engineOnlineCache[engine] = { value: false, expiresAt: Date.now() + 2000 };
     return false;
   }
 }
 
+function invalidateEngineCache() {
+  for (const id of LOCAL_ENGINE_IDS) _engineOnlineCache[id].expiresAt = 0;
+}
+
 // ─── Playback State ───────────────────────────────────────────────────────────
-let _isPlayingPiper    = false;
-let _isPausedPiper     = false;
-let _playbackEngine    = null; // "piper" or "browser"
+let _isPlaying    = false;
+let _isPaused     = false;
+let _playbackEngine    = null; // "piper", "kokoro" or "browser"
 let _playingSourceTabId = null; // tab that triggered the current playback
 let _currentVolume     = 1.0;  // cached from active profile; sent to content script overlay
 let _currentRate       = 1.0;  // cached from active profile; sent to content script overlay
 let _playbackProgress  = { active: false, engine: null, current: 0, total: 0, percent: null, label: "" };
-let _activePiperRequest = null;
+let _activeEngineRequest = null;
 let _browserSpeakGeneration = 0;
 
 function resetProgress() {
@@ -196,8 +218,8 @@ function resetProgress() {
 
 function playbackStateForTab(tabId) {
   return {
-    isPlaying: _isPlayingPiper,
-    isPaused:  _isPausedPiper,
+    isPlaying: _isPlaying,
+    isPaused:  _isPaused,
     volume:    _currentVolume,
     rate:      _currentRate,
     engine:    _playbackEngine,
@@ -226,22 +248,22 @@ function notifyPlaybackState(tabId = null) {
   });
 }
 
-// ─── Piper TTS ───────────────────────────────────────────────────────────────
-async function speakWithPiper(text, settings) {
-  const online = await checkPiperOnline();
-  if (!online) throw new Error("Piper server is offline");
+// ─── Local engine TTS (Piper or Kokoro, played by the offscreen document) ────
+async function speakWithEngine(engine, text, settings) {
+  const online = await checkEngineOnline(engine);
+  if (!online) throw new Error(`${engineLabel(engine)} server is offline`);
 
   _browserSpeakGeneration++;
   chrome.tts.stop();
-  _activePiperRequest = { text, settings: { ...settings } };
-  _isPlayingPiper = true;
-  _isPausedPiper  = false;
-  _playbackEngine = "piper";
+  _activeEngineRequest = { text, settings: { ...settings } };
+  _isPlaying = true;
+  _isPaused  = false;
+  _playbackEngine = engine;
   _currentVolume  = settings.volume ?? 1.0;
   _currentRate    = settings.rate ?? 1.0;
   _playbackProgress = {
     active: true,
-    engine: "piper",
+    engine,
     current: 0,
     total: 0,
     percent: 0,
@@ -254,9 +276,9 @@ async function speakWithPiper(text, settings) {
   } catch (err) {
     // Unexpected offscreen creation error — reset flag so the popup/shortcut
     // don't get stuck in "Playing" state forever.
-    _isPlayingPiper = false;
+    _isPlaying = false;
     _playbackEngine = null;
-    _activePiperRequest = null;
+    _activeEngineRequest = null;
     resetProgress();
     setStopMenuVisible(false);
     notifyPlaybackState();
@@ -265,15 +287,16 @@ async function speakWithPiper(text, settings) {
   chrome.runtime.sendMessage({
     type:    "speak-text",
     text,
-    piperUrl: PIPER_URL,
+    engine,
+    ttsUrl:  `${engineBaseUrl(engine)}/tts`,
     rate:    settings.rate   ?? 1.0,
     volume:  settings.volume ?? 1.0,
     voice:   settings.voice  || ""
   }).catch((err) => {
     console.error("speak-text delivery failed:", err);
-    _isPlayingPiper = false; // delivery failed — no playback-ended will ever arrive
+    _isPlaying = false; // delivery failed - no playback-ended will ever arrive
     _playbackEngine = null;
-    _activePiperRequest = null;
+    _activeEngineRequest = null;
     resetProgress();
     setStopMenuVisible(false);
     notifyPlaybackState();
@@ -282,14 +305,14 @@ async function speakWithPiper(text, settings) {
 
 // ─── Stop All ────────────────────────────────────────────────────────────────
 async function stopAll() {
-  _isPlayingPiper    = false;
-  _isPausedPiper     = false;
+  _isPlaying    = false;
+  _isPaused     = false;
   _playbackEngine    = null;
   _playingSourceTabId = null;
-  _activePiperRequest = null;
+  _activeEngineRequest = null;
   _browserSpeakGeneration++;
   resetProgress();
-  _piperOnlineCache.expiresAt = 0; // invalidate cache so next read checks fresh
+  invalidateEngineCache(); // so the next read checks the engines fresh
   await setStopMenuVisible(false);
   notifyPlaybackState();
   chrome.tts.stop();
@@ -302,24 +325,42 @@ async function stopAll() {
   } catch (_) {}
 }
 
-// ─── Speak with profile settings (Piper voice or Chrome default) ──────────────
-async function speakText(text, settings) {
-  const effectiveSettings = settings || {};
-  if (!effectiveSettings.voice) {
-    speakWithBrowser(text, effectiveSettings);
-    return;
-  }
+// ─── Speak with a profile (its engine, falling back to the browser voice) ────
+// Returns { ok, engine, fellBack, error } so callers (the popup's Test button,
+// the page hint) can say what actually happened.
+async function speakText(text, profile, tabId = null) {
+  const settings = normalizeProfile(profile || {});
+  const { fallback = true } = await chrome.storage.local.get("fallback");
 
-  try {
-    await speakWithPiper(text, effectiveSettings);
-  } catch (err) {
-    console.error("Piper failed:", err.message);
-    const { fallback = true } = await chrome.storage.local.get("fallback");
-    if (fallback) {
-      console.log("Falling back to browser TTS");
-      speakWithBrowser(text, effectiveSettings);
+  let online = {};
+  if (settings.engine !== "browser") {
+    online = { [settings.engine]: await checkEngineOnline(settings.engine) };
+  }
+  let choice = chooseEngine(settings, online, fallback);
+
+  if (choice.engine && choice.engine !== "browser") {
+    try {
+      await speakWithEngine(choice.engine, text, { ...settings, voice: choice.voice });
+      return { ok: true, engine: choice.engine, fellBack: false };
+    } catch (err) {
+      console.error(`${engineLabel(choice.engine)} failed:`, err.message);
+      choice = fallback
+        ? { engine: "browser", fellBack: true, reason: err.message }
+        : { engine: null, reason: err.message };
     }
   }
+
+  if (choice.engine === "browser") {
+    if (choice.fellBack) {
+      console.log(`${choice.reason}; falling back to the browser voice`);
+      if (tabId != null) showTabHint({ id: tabId }, `${choice.reason}. Using the browser voice.`);
+    }
+    speakWithBrowser(text, settings);
+    return { ok: true, engine: "browser", fellBack: choice.fellBack };
+  }
+
+  if (tabId != null) showTabHint({ id: tabId }, `${choice.reason}. Turn on the browser fallback in Settings to hear it anyway.`);
+  return { ok: false, engine: null, fellBack: false, error: choice.reason };
 }
 
 async function getActiveTab() {
@@ -343,7 +384,7 @@ function showTabHint(tab, message) {
 }
 
 async function readSelectionFromActiveTab() {
-  if (_isPlayingPiper) {
+  if (_isPlaying) {
     await stopAll();
     return;
   }
@@ -360,12 +401,12 @@ async function readSelectionFromActiveTab() {
   if (!profile) return;
 
   _playingSourceTabId = tab.id;
-  await speakText(text, profile);
+  await speakText(text, profile, tab.id);
 }
 
 async function togglePauseResume() {
-  if (_isPausedPiper) {
-    _isPausedPiper = false;
+  if (_isPaused) {
+    _isPaused = false;
     if (_playbackEngine === "browser") {
       chrome.tts.resume();
     } else {
@@ -375,8 +416,8 @@ async function togglePauseResume() {
       }).catch(() => []);
       if (existing.length > 0) chrome.runtime.sendMessage({ type: "resume-audio" }).catch(() => {});
     }
-  } else if (_isPlayingPiper) {
-    _isPausedPiper = true;
+  } else if (_isPlaying) {
+    _isPaused = true;
     if (_playbackEngine === "browser") {
       chrome.tts.pause();
     } else {
@@ -412,7 +453,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     // Also read the selected text with the newly chosen profile
     const selectedProfile = profiles.find(p => p.id === activeId);
     _playingSourceTabId = tab?.id ?? null;
-    if (selectedProfile && text) await speakText(text, selectedProfile);
+    if (selectedProfile && text) await speakText(text, selectedProfile, tab?.id ?? null);
     return;
   }
 
@@ -420,7 +461,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!profile) return;
 
   _playingSourceTabId = tab?.id ?? null;
-  await speakText(text, profile);
+  await speakText(text, profile, tab?.id ?? null);
 });
 
 chrome.commands.onCommand.addListener((command) => {
@@ -452,11 +493,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // Offscreen notifies us when queue finishes naturally
   if (message.type === "playback-ended") {
-    _isPlayingPiper = false;
-    _isPausedPiper  = false;
+    _isPlaying = false;
+    _isPaused  = false;
     _playbackEngine = null;
     _playingSourceTabId = null;
-    _activePiperRequest = null;
+    _activeEngineRequest = null;
     resetProgress();
     setStopMenuVisible(false);
     notifyPlaybackState();
@@ -464,23 +505,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "playback-error") {
-    const request = _activePiperRequest;
-    _isPlayingPiper = false;
-    _isPausedPiper  = false;
+    const request = _activeEngineRequest;
+    _isPlaying = false;
+    _isPaused  = false;
     _playbackEngine = null;
     _playingSourceTabId = null;
-    _activePiperRequest = null;
+    _activeEngineRequest = null;
     resetProgress();
     setStopMenuVisible(false);
     notifyPlaybackState();
 
     (async () => {
       const { fallback = true } = await chrome.storage.local.get("fallback");
+      const label = engineLabel(message.engine || request?.settings?.engine);
       if (fallback && request?.text) {
-        console.warn("Piper playback failed; falling back to browser TTS:", message.error);
+        console.warn(`${label} playback failed; falling back to browser TTS:`, message.error);
         speakWithBrowser(request.text, request.settings || {});
       } else {
-        console.error("Piper playback failed:", message.error);
+        console.error(`${label} playback failed:`, message.error);
       }
     })().catch(err => console.error("[playback-error]", err));
     return;
@@ -491,7 +533,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const total = Math.max(0, Number(message.total) || 0);
     _playbackProgress = {
       active: true,
-      engine: message.engine || _playbackEngine || "piper",
+      engine: message.engine || _playbackEngine,
       current,
       total,
       percent: typeof message.percent === "number" ? Math.max(0, Math.min(1, message.percent)) : null,
@@ -508,32 +550,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return; // synchronous
   }
 
+  // Test button (popup / options): speak with the given settings and report
+  // which engine actually played, so the UI can say "Kokoro is offline, used
+  // the browser voice" instead of silently sounding different.
   if (message.type === "test-voice") {
     const { text, settings = {} } = message;
-    if (!settings.voice) {
-      speakWithBrowser(text, settings);
-      sendResponse({ ok: true });
-      return;
-    }
-
-    // Use speakWithPiper directly so errors can surface to the popup.
-    // Apply the browser-TTS fallback manually here so the popup still gets
-    // a meaningful { ok: false } when both Piper and fallback are unavailable.
-    speakWithPiper(text, settings)
-      .then(() => {
-        if (chrome.runtime.lastError) return; // channel already closed — swallow
-        sendResponse({ ok: true });
-      })
-      .catch(async (piperErr) => {
-        if (chrome.runtime.lastError) return;
-        const { fallback = true } = await chrome.storage.local.get("fallback");
-        if (fallback) {
-          speakWithBrowser(text, settings);
-          sendResponse({ ok: true });
-        } else {
-          sendResponse({ ok: false, error: piperErr.message });
-        }
-      });
+    speakText(text, settings)
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true;
   }
 
@@ -548,7 +572,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       const { profiles, activeId } = await getProfileState();
       const profile = profiles.find(p => p.id === activeId) || profiles[0];
-      if (profile) await speakText(text, profile);
+      if (profile) await speakText(text, profile, sender.tab?.id ?? null);
     })().catch(err => console.error("[keyboard-read]", err));
     return;
   }
@@ -564,7 +588,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (isVolume) _currentVolume = value; else _currentRate = value;
 
-    // Forward to the offscreen Piper player for real-time adjustment. (The
+    // Forward to the offscreen player for real-time adjustment. (The
     // browser-TTS engine can't change mid-utterance, so the overlay disables
     // the rocker in that case and won't send these.)
     (async () => {

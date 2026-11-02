@@ -37,8 +37,9 @@ body {
 
 .page-header-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
   margin-bottom: 4px;
 }
 
@@ -468,6 +469,7 @@ body {
 
 .voice-card-info { flex: 1; min-width: 0; }
 .voice-card-name {
+  display: block;
   font-size: 14px;
   font-weight: 600;
   color: #cdd6f4;
@@ -476,6 +478,7 @@ body {
   text-overflow: ellipsis;
 }
 .voice-card-file {
+  display: block;
   font-size: 12px;
   color: #6c7086;
   font-family: "SF Mono", "Fira Code", Consolas, monospace;
@@ -594,6 +597,7 @@ body {
 }
 
 .setting-row-info { cursor: default; align-items: center; }
+.setting-row-info > .setting-label { flex: 0 0 64px; }
 .setting-code {
   font-family: "SF Mono", "Fira Code", Consolas, monospace;
   font-size: 12px;
@@ -830,6 +834,76 @@ body {
 .quality-low   { background: #2a2040; color: #cba6f7; }
 .quality-med   { background: #1e3a2a; color: #a6e3a1; }
 .quality-high  { background: #3a1e2e; color: #f38ba8; }
+
+/* ─── Engines (LocalVoice) ───────────────────────────────────────────────────── */
+.engine-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 14px;
+  background: #181825;
+  border: 1px solid #313244;
+  border-radius: 9px;
+}
+.engine-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #a6adc8;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.engine-switch-btn:hover { color: #cdd6f4; }
+.engine-switch-btn.active { background: #313244; color: #cba6f7; }
+.engine-switch-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6c7086;
+  background: #1e1e2e;
+  border-radius: 8px;
+  padding: 0 6px;
+  min-width: 18px;
+  text-align: center;
+}
+.engine-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #45475a;
+  flex-shrink: 0;
+}
+.engine-dot.online  { background: #a6e3a1; }
+.engine-dot.offline { background: #f38ba8; }
+
+.lang-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+  background: #1e2a3a;
+  color: #89b4fa;
+}
+.lang-badge-default { background: #313244; color: #a6adc8; }
+
+.voices-offline-banner code {
+  font-family: "SF Mono", "Fira Code", Consolas, monospace;
+  font-size: 11px;
+}
+
+.setting-status { font-size: 13px; color: #a6adc8; }
+.setting-status.online  { color: #a6e3a1; }
+.setting-status.offline { color: #f38ba8; }
+.setting-recheck { margin-left: auto; }
+.setting-link { color: #cba6f7; }
 
 /* ─── Utility ────────────────────────────────────────────────────────────────── */
 .hidden { display: none !important; }
