@@ -319,7 +319,11 @@ class KokoroEngine:
                 "modelUnloadedAt": iso_utc(self._unloaded_at),
                 "lastSpeakAt": iso_utc(self._last_speak_at),
                 "idleSeconds": round(idle),
-                "idleUnloadSeconds": self._idle_unload_seconds,
+                "idleUnloadSeconds": (
+                    int(self._idle_unload_seconds)
+                    if float(self._idle_unload_seconds).is_integer()
+                    else self._idle_unload_seconds
+                ),
             }
 
     def stop(self) -> None:
