@@ -18,7 +18,7 @@ const os = require('os');
 const { spawn } = require('child_process');
 
 const TRAY_DIR = __dirname;
-const SERVER_DIR = path.dirname(TRAY_DIR); // .../local-piper-server
+const SERVER_DIR = path.dirname(TRAY_DIR); // .../servers/piper
 const ASSETS = path.join(TRAY_DIR, 'assets');
 const LOG_DIR = path.join(SERVER_DIR, 'logs');
 const PID_FILE = path.join(LOG_DIR, 'piper-tts-server.pid');

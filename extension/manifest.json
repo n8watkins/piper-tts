@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Piper TTS",
-  "version": "1.0.17",
-  "description": "Highlight text, right-click, and hear it read aloud with local Piper voices — no cloud, no API keys.",
+  "name": "LocalVoice",
+  "version": "1.1.0",
+  "description": "Highlight text and hear it read aloud by local Piper or Kokoro voices. No cloud, no API keys.",
   "permissions": [
     "contextMenus",
     "tts",
@@ -11,7 +11,8 @@
     "offscreen"
   ],
   "host_permissions": [
-    "http://127.0.0.1:7477/*"
+    "http://127.0.0.1:7477/*",
+    "http://127.0.0.1:7478/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -26,7 +27,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Piper TTS"
+    "default_title": "LocalVoice"
   },
   "options_ui": {
     "page": "options.html",

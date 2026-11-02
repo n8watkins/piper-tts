@@ -23,7 +23,7 @@ if (-not $env:PIPER_BIN) {
 }
 
 if (-not (Test-Path $env:PIPER_BIN)) {
-  Write-Error "Piper executable was not found: $env:PIPER_BIN. Download Piper and place piper.exe in local-piper-server\piper\, or set PIPER_BIN."
+  Write-Error "Piper executable was not found: $env:PIPER_BIN. Download Piper and place piper.exe in servers\piper\piper\, or set PIPER_BIN."
 }
 
 New-Item -ItemType Directory -Force -Path $env:VOICE_DIR, $env:OUTPUT_DIR | Out-Null

@@ -1,0 +1,22 @@
+[Unit]
+Description=LocalVoice Kokoro TTS server (local, 127.0.0.1:7478)
+# Retry forever: WSL/terminal churn (a closed launching pane's SIGHUP) or a
+# crash must never permanently, silently kill the engine - that outage is the
+# whole reason this unit exists.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# The placeholder below is replaced with the real repo path by
+# install-service.sh, so this works regardless of where the repo is cloned.
+WorkingDirectory=@KOKORO_DIR@
+ExecStart=@KOKORO_DIR@/start.sh
+# Auto-restart on ANY exit - crash, OOM kill, or the SIGHUP that killed the old
+# unsupervised foreground process when its terminal closed - after a short
+# backoff. journald captures start.sh's stdout (previously there were NO logs).
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+
+[Install]
+WantedBy=default.target

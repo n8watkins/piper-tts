@@ -1,9 +1,11 @@
 /**
- * Piper TTS Local Server
+ * LocalVoice Piper server
  *
- * Runs on http://127.0.0.1:7477 by default
+ * Runs on http://127.0.0.1:7477 by default and speaks the shared LocalVoice
+ * API (docs/API.md in the repo root):
+ * GET  /health                  → { status, engine: "piper", version }
+ * GET  /voices                  → { engine, voices, defaultVoice, sizes, voiceDir }
  * POST /tts  { "text": "..." }  → audio/wav
- * GET  /health                  → 200 OK
  *
  * Requires:
  *   piper/piper.exe on Windows, or piper/piper on macOS/Linux
@@ -50,7 +52,7 @@ function enforceAllowedOrigin(req, res, next) {
     next();
     return;
   }
-  res.status(403).json({ error: "Origin not allowed by Piper TTS local server." });
+  res.status(403).json({ error: "Origin not allowed by the LocalVoice Piper server." });
 }
 
 const corsOptions = {
@@ -66,7 +68,7 @@ app.use(express.json({ limit: "1mb" }));
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", version });
+  res.json({ status: "ok", engine: "piper", version });
 });
 
 // ─── Validation Helpers ───────────────────────────────────────────────────────
@@ -265,9 +267,9 @@ app.get("/voices", async (_req, res) => {
       } catch { sizes[f] = 0; }
     }));
 
-    res.json({ voices, sizes, voiceDir: VOICE_DIR });
+    res.json({ engine: "piper", voices, defaultVoice: DEFAULT_VOICE, sizes, voiceDir: VOICE_DIR });
   } catch (_) {
-    res.json({ voices: [], sizes: {}, voiceDir: VOICE_DIR });
+    res.json({ engine: "piper", voices: [], defaultVoice: DEFAULT_VOICE, sizes: {}, voiceDir: VOICE_DIR });
   }
 });
 
@@ -318,6 +320,23 @@ app.delete("/voices/:name", async (req, res) => {
   }
 });
 
+// ─── Unknown routes: JSON 404, like every other error ────────────────────────
+app.use((_req, res) => {
+  res.status(404).json({ error: "Not found." });
+});
+
+// Body-parser failures (malformed JSON, oversized body) as JSON too, not the
+// default HTML error page.
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
+  const status = err.status || err.statusCode || 500;
+  const error =
+    err.type === "entity.parse.failed" ? "Invalid request body." :
+    err.type === "entity.too.large"    ? "Request body is too large." :
+                                         "Server error.";
+  res.status(status).json({ error, details: err.message });
+});
+
 // ─── Startup: clean stale WAV files from a previous crashed session ───────────
 async function cleanOutputDir() {
   try {
@@ -334,10 +353,10 @@ async function cleanOutputDir() {
 }
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
-(async () => {
+async function start() {
   await cleanOutputDir();
-  app.listen(PORT, HOST, () => {
-    console.log(`\n🔊 Piper TTS Local Server v${version}`);
+  return app.listen(PORT, HOST, () => {
+    console.log(`\n🔊 LocalVoice Piper server v${version}`);
     console.log(`   Running at http://${HOST}:${PORT}`);
     console.log(`   Health:  GET  http://${HOST}:${PORT}/health`);
     console.log(`   TTS:     POST http://${HOST}:${PORT}/tts`);
@@ -347,4 +366,12 @@ async function cleanOutputDir() {
     console.log(`   Default voice: ${DEFAULT_VOICE}`);
     console.log(`\n   Press Ctrl+C to stop.\n`);
   });
-})();
+}
+
+// Started directly (node server.js, the tray, n8piper): listen. Required by the
+// tests: export the app without listening.
+if (require.main === module) {
+  start();
+}
+
+module.exports = { app, isAllowedOrigin };

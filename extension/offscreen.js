@@ -1,4 +1,5 @@
-// Offscreen document: handles Piper TTS fetching and audio playback.
+// Offscreen document: fetches audio from the local engine (Piper or Kokoro)
+// and plays it.
 // This runs in a real DOM context, unlike the service worker.
 
 let currentAudio = null;
@@ -13,11 +14,15 @@ let isPaused  = false; // true while audio is paused mid-queue
 let playGeneration = 0; // incremented on each new speak request; stale queues self-terminate
 let currentVolume = 1.0; // updated by speak-text and set-volume; used for per-chunk initial gain
 let currentRate = 1.0;   // updated by speak-text and set-rate; applied live + to later chunks
+let currentEngine = "piper"; // engine of the active speak-text request
+
+const ENGINE_LABELS = { piper: "Piper", kokoro: "Kokoro" };
+const engineLabel = (engine) => ENGINE_LABELS[engine] || "TTS";
 
 function sendProgress(current, total, label = "") {
   chrome.runtime.sendMessage({
     type: "playback-progress",
-    engine: "piper",
+    engine: currentEngine,
     current,
     total,
     percent: total > 0 ? current / total : null,
@@ -52,28 +57,28 @@ function splitIntoChunks(text, maxLength = 350, firstMaxLength = 140) {
   return chunks.length > 0 ? chunks : [text];
 }
 
-// ─── Fetch Audio from Piper ───────────────────────────────────────────────────
+// ─── Fetch Audio from the local engine ────────────────────────────────────────
 // V2 fix: 30s per-chunk timeout so a server that accepts TCP but stalls never
 // leaves the queue hanging indefinitely.
 const FETCH_TIMEOUT_MS = 30_000;
 
 // In-flight fetches so a stop (or a new speak request) can abort a prefetch
 // that's still synthesizing on the server — otherwise the discarded chunk keeps
-// running for up to FETCH_TIMEOUT_MS, wasting Piper CPU on audio nobody hears.
+// running for up to FETCH_TIMEOUT_MS, wasting engine CPU on audio nobody hears.
 const activeFetches = new Set();
 function abortPendingFetches() {
   for (const c of activeFetches) { try { c.abort(); } catch (_) {} }
   activeFetches.clear();
 }
 
-async function fetchPiperAudio(text, piperUrl, voice = "") {
+async function fetchEngineAudio(text, ttsUrl, voice = "", engine = currentEngine) {
   const controller = new AbortController();
   activeFetches.add(controller);
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   let response;
   try {
-    response = await fetch(piperUrl, {
+    response = await fetch(ttsUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(voice ? { text, voice } : { text }),
@@ -90,7 +95,7 @@ async function fetchPiperAudio(text, piperUrl, voice = "") {
       const body = await response.json();
       details = body.error || "";
     } catch (_) {}
-    throw new Error(`Piper server error ${response.status}${details ? ": " + details : ""}`);
+    throw new Error(`${engineLabel(engine)} server error ${response.status}${details ? ": " + details : ""}`);
   }
 
   return response.blob();
@@ -224,7 +229,7 @@ function stopAll() {
 // values currentVolume/currentRate (set by speak-text and updated by the overlay
 // rocker) so adjustments carry across chunk boundaries. Passing them in would
 // invite a refactor that silently breaks live adjustment.
-async function playQueue(chunks, piperUrl, voice, generation) {
+async function playQueue(chunks, ttsUrl, voice, engine, generation) {
   isPlaying = true;
   playbackQueue = [...chunks];
   const totalChunks = chunks.length;
@@ -236,7 +241,7 @@ async function playQueue(chunks, piperUrl, voice, generation) {
   // Pipeline: synthesize chunk i+1 while chunk i plays, so there's no gap
   // between chunks and the rest is fetched while audio is already going. The
   // .then(ok, err) wrapper keeps a prefetched promise from rejecting unhandled.
-  const fetchChunk = (i) => fetchPiperAudio(chunks[i], piperUrl, voice)
+  const fetchChunk = (i) => fetchEngineAudio(chunks[i], ttsUrl, voice, engine)
     .then((blob) => ({ blob }), (err) => ({ err }));
   let pending = fetchChunk(0);
 
@@ -247,8 +252,8 @@ async function playQueue(chunks, piperUrl, voice, generation) {
       failed = true;
       chrome.runtime.sendMessage({
         type: "playback-error",
-        engine: "piper",
-        error: (err && err.message) || "Piper playback failed."
+        engine,
+        error: (err && err.message) || `${engineLabel(engine)} playback failed.`
       }).catch(() => {});
     }
   };
@@ -339,7 +344,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === "speak-text") {
-    const { text, piperUrl, volume = 1.0, rate = 1.0, voice = "" } = message;
+    const { text, ttsUrl, engine = "piper", volume = 1.0, rate = 1.0, voice = "" } = message;
     currentVolume = volume; // live value; playQueue reads this for each chunk
     currentRate = rate;     // live value; playQueue reads this for each chunk
 
@@ -347,13 +352,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     stopAll();
     playGeneration++;
     const gen = playGeneration;
+    currentEngine = engine;
 
     const chunks = splitIntoChunks(text);
 
     // Fire-and-forget: background.js no longer awaits a response, so respond
     // immediately and let playback run independently. This eliminates the
     // long-lived message channel that Chrome was killing mid-flight.
-    playQueue(chunks, piperUrl, voice, gen).catch((err) => {
+    playQueue(chunks, ttsUrl, voice, engine, gen).catch((err) => {
       console.error("Queue playback error:", err);
     });
 
