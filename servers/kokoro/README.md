@@ -63,7 +63,8 @@ The model only sits in memory while it is being used:
 - The first `/tts` request loads it, which adds about 1-3 s to that request.
 - After `KOKORO_IDLE_UNLOAD_SECONDS` without a `/tts` request (default `600`, 10 minutes), it is released again.
   Set it to `0` to keep the model loaded once it has loaded.
-- `/health` and `/voices` never load it: voice names come from the voices file's index, and `/health` reports `"modelLoaded": true` or `false`.
+- `/health` and `/voices` never load it: voice names come from the voices file's index.
+- `/health` reports the memory state for trays and monitors: `modelLoaded`, `speaking`, `rssMb` (the process's resident memory), when the model was last loaded and released, the last request and the idle seconds (see [`docs/API.md`](../../docs/API.md#get-health)).
 
 Measured on WSL2 (resident memory of the server process):
 

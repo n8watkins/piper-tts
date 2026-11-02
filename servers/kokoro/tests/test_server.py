@@ -125,7 +125,7 @@ class ApiContractTests(ServerTestCase):
         self.assertEqual(data["engine"], "kokoro")
         self.assertEqual(data["version"], server.VERSION)
         self.assertEqual(data["voices"], 3)
-        self.assertIs(data["modelLoaded"], True, "engines without is_loaded() count as loaded")
+        self.assertIs(data["modelLoaded"], True, "engines without status() count as loaded")
 
     def test_voices_shape(self):
         _, body = self.request("GET", "/voices")
@@ -199,8 +199,8 @@ class FakeKokoro:
 
 
 class FakeClock:
-    def __init__(self):
-        self.now = 1000.0
+    def __init__(self, now=1000.0):
+        self.now = now
 
     def __call__(self):
         return self.now
@@ -223,6 +223,7 @@ class LazyEngineTests(unittest.TestCase):
         self.loads = []
         self.releases = 0
         self.clock = FakeClock()
+        self.wall = FakeClock(1_800_000_000.0)  # 2027-01-15T08:00:00Z
         self.gate = None
         # wav_bytes needs numpy; the engine's memory behavior doesn't.
         patcher = mock.patch.object(server, "wav_bytes", lambda samples, rate: FAKE_WAV)
@@ -245,6 +246,8 @@ class LazyEngineTests(unittest.TestCase):
             loader=self.loader,
             release=self.release,
             clock=self.clock,
+            wall_clock=self.wall,
+            rss_mb=lambda: 42.5,
             start_reaper=False,
         )
         options.update(kwargs)
@@ -338,6 +341,49 @@ class LazyEngineTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertFalse(engine.is_loaded(), "the reaper keeps working after a reload")
 
+    def test_status_reports_memory_and_model_events(self):
+        engine = self.engine(idle=600)
+        status = engine.status()
+        self.assertEqual(status["rssMb"], 42.5)
+        self.assertIs(status["modelLoaded"], False)
+        self.assertIs(status["speaking"], False)
+        self.assertEqual(status["startedAt"], "2027-01-15T08:00:00Z")
+        self.assertIsNone(status["modelLoadedAt"])
+        self.assertIsNone(status["modelUnloadedAt"])
+        self.assertIsNone(status["lastSpeakAt"])
+        self.assertEqual(status["idleUnloadSeconds"], 600)
+        self.assertIsInstance(status["pid"], int)
+
+        self.wall.now += 60
+        engine.synthesize("hi", "af_heart", 1.0, "en-us")
+        self.clock.now += 30
+        status = engine.status()
+        self.assertIs(status["modelLoaded"], True)
+        self.assertEqual(status["modelLoadedAt"], "2027-01-15T08:01:00Z")
+        self.assertEqual(status["lastSpeakAt"], "2027-01-15T08:01:00Z")
+        self.assertEqual(status["idleSeconds"], 30)
+
+        self.clock.now += 570
+        self.wall.now += 600
+        engine.unload_if_idle()
+        status = engine.status()
+        self.assertIs(status["modelLoaded"], False)
+        self.assertEqual(status["modelUnloadedAt"], "2027-01-15T08:11:00Z")
+        self.assertEqual(status["modelLoadedAt"], "2027-01-15T08:01:00Z", "kept for history")
+
+    def test_status_while_speaking(self):
+        self.gate = threading.Event()
+        engine = self.engine()
+        worker = threading.Thread(target=engine.synthesize, args=("long", "af_heart", 1.0, "en-us"))
+        worker.start()
+        self.assertTrue(self.kokoro_started())
+        self.clock.now += 100
+        status = engine.status()
+        self.assertIs(status["speaking"], True)
+        self.assertEqual(status["idleSeconds"], 0)
+        self.gate.set()
+        worker.join(5)
+
     def test_missing_model_files_fail_fast(self):
         self.model_path.unlink()
         with self.assertRaises(SystemExit):
@@ -359,6 +405,8 @@ class LazyEngineTests(unittest.TestCase):
             health = get("/health")
             self.assertEqual(health["voices"], 3)
             self.assertIs(health["modelLoaded"], False)
+            self.assertEqual(health["rssMb"], 42.5)
+            self.assertEqual(health["idleUnloadSeconds"], 600)
             self.assertEqual(get("/voices")["voices"], self.VOICES)
             self.assertEqual(self.loads, [])
             engine.synthesize("hi", "af_heart", 1.0, "en-us")
@@ -382,6 +430,17 @@ class HelperTests(unittest.TestCase):
 
     def test_release_freed_memory_is_safe_to_call(self):
         server.release_freed_memory()
+
+    def test_process_rss_mb(self):
+        rss = server.process_rss_mb()
+        if Path("/proc/self/status").exists():
+            self.assertGreater(rss, 1)
+        else:
+            self.assertIsNone(rss)
+
+    def test_iso_utc(self):
+        self.assertIsNone(server.iso_utc(None))
+        self.assertEqual(server.iso_utc(0), "1970-01-01T00:00:00Z")
 
     def test_lang_for_voice(self):
         self.assertEqual(server.lang_for_voice("af_heart"), "en-us")

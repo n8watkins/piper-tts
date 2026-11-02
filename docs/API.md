@@ -30,7 +30,13 @@ The extension expects the defaults.
 ```
 
 ```json
-{ "status": "ok", "engine": "kokoro", "version": "1.0.0", "voices": 54, "modelLoaded": false }
+{
+  "status": "ok", "engine": "kokoro", "version": "1.0.0", "voices": 54,
+  "modelLoaded": false, "speaking": false, "rssMb": 46.9, "pid": 4242,
+  "startedAt": "2026-11-02T18:00:00Z", "modelLoadedAt": "2026-11-02T18:05:12Z",
+  "modelUnloadedAt": "2026-11-02T18:15:20Z", "lastSpeakAt": "2026-11-02T18:05:19Z",
+  "idleSeconds": 640, "idleUnloadSeconds": 600
+}
 ```
 
 | Field | Type | Notes |
@@ -40,6 +46,14 @@ The extension expects the defaults.
 | `version` | string | The server's own version (the servers are versioned separately from the extension). |
 | `voices` | number | Kokoro only: how many voices are available. |
 | `modelLoaded` | boolean | Kokoro only: whether the model is in memory right now. `false` is normal: the model loads on the first `/tts` request (adding 1-3 s to it) and is released after an idle period. Checking `/health` never loads it. |
+| `speaking` | boolean | Kokoro only: a `/tts` request is being synthesized right now. |
+| `rssMb` | number or null | Kokoro only: the server process's resident memory in MB (null where the OS doesn't expose it cheaply; Linux and WSL do). |
+| `pid` | number | Kokoro only: the server's process id. |
+| `startedAt`, `modelLoadedAt`, `modelUnloadedAt`, `lastSpeakAt` | ISO 8601 UTC string or null | Kokoro only: when the server started, when the model was last loaded and released, and when the last `/tts` started. `null` means "not since start". |
+| `idleSeconds` | number | Kokoro only: seconds since the last `/tts` finished (since start if none; `0` while speaking). |
+| `idleUnloadSeconds` | number | Kokoro only: the configured idle period before the model is released (`0` = never). |
+
+All of these are cheap to compute, so trays can poll `/health` for live memory without loading anything.
 
 Clients should treat any non-`200` response, a timeout (the extension uses 2.5 s), or a connection error as "offline".
 

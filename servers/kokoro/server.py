@@ -5,7 +5,7 @@ It speaks the same HTTP API as the VoiceDock Piper server (see
 docs/API.md in the repo root):
 
   GET  /health  -> {"status": "ok", "engine": "kokoro", "version": "...", "voices": 54,
-                    "modelLoaded": false}
+                    "modelLoaded": false, "rssMb": 11.3, ...memory fields}
   GET  /voices  -> {"engine": "kokoro", "voices": [...]}
   POST /tts     -> body {"text": "...", "voice": "af_heart", "speed": 1.0, "lang": "en-us"}
                    returns audio/wav (16-bit PCM, 24 kHz mono)
@@ -44,6 +44,7 @@ import threading
 import time
 import wave
 import zipfile
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, Protocol
@@ -119,8 +120,8 @@ def is_allowed_origin(origin: str | None) -> bool:
 class Engine(Protocol):
     """What the HTTP layer needs from a synthesizer; tests pass a fake.
 
-    An engine may also define is_loaded() -> bool, reported by /health as
-    modelLoaded (engines without it are reported as loaded).
+    An engine may also define status() -> dict, merged into /health (memory
+    and model state); engines without it are reported as modelLoaded.
     """
 
     def voices(self) -> list[str]: ...
@@ -173,6 +174,25 @@ def release_freed_memory() -> None:
     trim(0)
 
 
+def process_rss_mb() -> float | None:
+    """This process's resident memory in MB (Linux /proc), or None elsewhere."""
+    try:
+        with open("/proc/self/status", encoding="ascii") as status:
+            for line in status:
+                if line.startswith("VmRSS:"):
+                    return round(int(line.split()[1]) / 1024, 1)  # kB -> MB
+    except OSError:
+        pass
+    return None
+
+
+def iso_utc(timestamp: float | None) -> str | None:
+    """A Unix timestamp as an ISO 8601 UTC string (second precision)."""
+    if timestamp is None:
+        return None
+    return datetime.fromtimestamp(timestamp, timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
 def load_kokoro(model_path: Path, voices_path: Path):
     from kokoro_onnx import Kokoro
 
@@ -197,6 +217,8 @@ class KokoroEngine:
         loader: Callable[[Path, Path], object] = load_kokoro,
         release: Callable[[], None] = release_freed_memory,
         clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
+        rss_mb: Callable[[], float | None] = process_rss_mb,
         start_reaper: bool = True,
     ):
         if not model_path.exists() or not voices_path.exists():
@@ -209,6 +231,12 @@ class KokoroEngine:
         self._loader = loader
         self._release = release
         self._clock = clock
+        self._wall_clock = wall_clock
+        self._rss_mb = rss_mb
+        self._started_at = wall_clock()
+        self._loaded_at: float | None = None  # wall-clock times, for /health
+        self._unloaded_at: float | None = None
+        self._last_speak_at: float | None = None
         self._voices = read_voice_names(voices_path)
         self._kokoro = None
         self._active = 0  # synthesis calls in flight
@@ -235,10 +263,12 @@ class KokoroEngine:
                 started = time.monotonic()
                 print(f"[kokoro] loading model {self._model_path.name} ...", flush=True)
                 self._kokoro = self._loader(self._model_path, self._voices_path)
+                self._loaded_at = self._wall_clock()
                 print(f"[kokoro] model loaded in {time.monotonic() - started:.1f} s", flush=True)
                 self._wake.set()  # let the reaper start counting idle time
             kokoro = self._kokoro
             self._active += 1
+            self._last_speak_at = self._wall_clock()
         try:
             samples, sample_rate = kokoro.create(text, voice=voice, speed=speed, lang=lang)
         finally:
@@ -259,6 +289,7 @@ class KokoroEngine:
                 return False
             idle = self._clock() - self._last_used
             self._kokoro = None  # the last reference: no synthesis is in flight
+            self._unloaded_at = self._wall_clock()
         self._release()
         print(f"[kokoro] model released after {idle:.0f} s idle", flush=True)
         return True
@@ -271,6 +302,25 @@ class KokoroEngine:
             if self._active:
                 return self._idle_unload_seconds
             return max(0.0, self._last_used + self._idle_unload_seconds - self._clock())
+
+    def status(self) -> dict:
+        """Memory and model state for /health; cheap, never loads the model."""
+        with self._lock:
+            loaded = self._kokoro is not None
+            speaking = self._active > 0
+            idle = 0.0 if speaking else max(0.0, self._clock() - self._last_used)
+            return {
+                "modelLoaded": loaded,
+                "speaking": speaking,
+                "rssMb": self._rss_mb(),
+                "pid": os.getpid(),
+                "startedAt": iso_utc(self._started_at),
+                "modelLoadedAt": iso_utc(self._loaded_at),
+                "modelUnloadedAt": iso_utc(self._unloaded_at),
+                "lastSpeakAt": iso_utc(self._last_speak_at),
+                "idleSeconds": round(idle),
+                "idleUnloadSeconds": self._idle_unload_seconds,
+            }
 
     def stop(self) -> None:
         self._stopped = True
@@ -344,15 +394,18 @@ def make_handler(engine: Engine) -> type[BaseHTTPRequestHandler]:
                 return
             path = self._path()
             if path == "/health":
-                is_loaded = getattr(engine, "is_loaded", None)
-                self._json(200, {
+                health = {
                     "status": "ok",
                     "engine": ENGINE,
                     "version": VERSION,
                     "voices": len(engine.voices()),
-                    # Never loads the model: it only reports whether it is in memory.
-                    "modelLoaded": bool(is_loaded()) if is_loaded else True,
-                })
+                    "modelLoaded": True,
+                }
+                # Memory and model state; never loads the model.
+                status = getattr(engine, "status", None)
+                if status:
+                    health.update(status())
+                self._json(200, health)
             elif path == "/voices":
                 self._json(200, {
                     "engine": ENGINE,
