@@ -34,7 +34,7 @@ Set up Piper for natural local voices, and add Kokoro only if you want its voice
 
 <img src="screenshots/options-credits.png" alt="Credits tab" width="560">
 
-`npm run screenshots` regenerates these from WSL with Windows Chrome and mocked servers (see `tools/capture-screenshots.mjs`).
+`npm run screenshots` regenerates these from WSL with headless Windows Chrome (no window opens) and mocked servers (see `tools/capture-screenshots.mjs`).
 If your Windows account, Chrome path, or Windows Node path differs from the defaults, set `PIPER_TTS_WINDOWS_USER`, `PIPER_TTS_CHROME_PATH` or `PIPER_TTS_WINDOWS_NODE`.
 
 ---
