@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LocalVoice",
-  "version": "1.0.17",
+  "version": "1.1.0",
   "description": "Highlight text and hear it read aloud by local Piper or Kokoro voices. No cloud, no API keys.",
   "permissions": [
     "contextMenus",
