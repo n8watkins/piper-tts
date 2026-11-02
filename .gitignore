@@ -1,5 +1,6 @@
 # Node
-node_modules/
+# No trailing slash: also ignores a node_modules symlink, not just a folder.
+node_modules
 npm-debug.log*
 yarn-error.log*
 
