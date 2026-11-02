@@ -58,6 +58,6 @@ Do these together, in this order, so links never break for long.
 5. **Windows folders**: Chrome loads the unpacked extension from `C:\Users\natha\Projects\Tools\piper-tts\extension`.
    An unpacked extension's ID comes from its folder path, so renaming that folder resets the locally loaded extension's settings.
    Leave it, or re-create profiles after moving it (the store version is unaffected).
-6. **Standalone Piper tray** (`servers/piper/tray`): its menu title and the "Piper TTS Tray" startup shortcut name.
-   It is specifically the Piper server's tray, so it can keep the Piper name.
+6. **Standalone tray** (`servers/piper/tray`): done.
+   It is now the **VoiceDock tray** (`tray/voicedock-tray.js`, startup shortcut `VoiceDock Tray`), shows both engines, and replaces an old `Piper TTS Tray` shortcut on its first start.
 7. **kokoro-tts repo**: already points to this repo's `servers/kokoro`; update that pointer if the repo is renamed (GitHub's redirect covers it meanwhile).

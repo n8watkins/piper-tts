@@ -52,7 +52,7 @@ voicedock/                      (VoiceDock)
 │   ├── dist/                   Built React bundles loaded by Chrome
 │   └── popup.*, options.*, icons/
 ├── servers/
-│   ├── piper/                  Node.js server that runs piper.exe (port 7477), plus its tray
+│   ├── piper/                  Node.js server that runs piper.exe (port 7477), plus the VoiceDock tray
 │   └── kokoro/                 Python server that runs Kokoro-82M (port 7478), plus a systemd unit
 ├── docs/
 │   ├── API.md                  The engine API both servers implement
@@ -132,7 +132,8 @@ The quick way, from `servers/piper/`:
 npm run setup
 ```
 
-It adapts to your OS: it installs dependencies, downloads the Piper binary and a default voice (`en_US-amy-medium`), starts the server, and adds a tray (green or red status dot) that starts at login.
+It adapts to your OS: it installs dependencies, downloads the Piper binary and a default voice (`en_US-amy-medium`), starts the server, and adds the VoiceDock tray (green or red status dot) that starts at login.
+The tray shows both engines with their live memory, starts, stops and restarts Piper, and can record memory history and open a memory report; see [servers/piper/README.md](servers/piper/README.md#4-start-the-server).
 It is idempotent, so re-run it anytime.
 
 <details>
@@ -159,7 +160,7 @@ Platform helpers, all from `servers/piper/`:
 | `npm run start:unix` | Start on macOS or Linux. |
 | `npm run start:windows` | Start in a PowerShell window. |
 | `npm run start:windows:bg` / `npm run stop:windows:bg` | Start or stop a hidden background server on Windows. |
-| `npm run start:windows:tray` | Start the Windows tray (status, Start, Stop, Restart, Open Voices Folder, Exit). |
+| `npm run start:windows:tray` | Start the VoiceDock tray (both engines' status and memory, Start, Stop and Restart Piper, memory report). |
 | `npm run install:windows:tray` / `npm run uninstall:windows:tray` | Add or remove the tray from Windows sign-in startup. |
 
 If another Piper server is already running, the tray shows it as external and won't stop a process it doesn't manage.
@@ -326,6 +327,7 @@ Common causes: no Piper voice downloaded, a missing `piper.exe`, or the Kokoro m
 - [x] Local Piper server, offscreen playback, sentence chunking with prefetch
 - [x] Named profiles, voice management, keyboard shortcuts, on-page overlay
 - [x] Windows tray and one-command Piper setup
+- [x] VoiceDock tray: both engines with live memory, memory history and a memory report
 - [x] Kokoro as a second engine, chosen per profile (1.1)
 - [ ] One N8 Tray module that runs both engines ([docs/TRAY_PLAN.md](docs/TRAY_PLAN.md))
 - [ ] Rename the repo and the Chrome Web Store listing ([docs/NAMING.md](docs/NAMING.md))

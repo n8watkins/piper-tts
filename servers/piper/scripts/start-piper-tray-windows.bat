@@ -1,3 +1,0 @@
-@echo off
-set "SCRIPT=%~dp0piper-tray-windows.ps1"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell -WindowStyle Hidden -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','%SCRIPT%')"

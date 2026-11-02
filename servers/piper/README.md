@@ -85,15 +85,39 @@ npm run stop:windows:bg
 
 The background wrapper is intentionally small: single instance guard, PID files, and logs in `servers/piper/logs/`. A tray host can call `scripts/start-background-windows.ps1` and `scripts/stop-background-windows.ps1` instead of embedding server logic.
 
-Minimal Windows tray:
+VoiceDock tray (Windows, macOS, Linux):
 
 ```powershell
-npm run start:windows:tray
+npm run start:windows:tray   # or, on any OS: npm run tray
 ```
 
-The tray uses the Piper icon and a plain Windows menu: status, Start Server, Stop Server, Open Voices Folder, and Exit. When the tray launches, it starts the server automatically if the server is offline. If another Piper server is already running outside the tray, the tray shows it as an external server and disables Stop Server so it does not kill a process it does not manage.
+It shows both VoiceDock engines in one menu:
 
-Install or remove Windows sign-in startup:
+- **Piper**: status and live memory (the server plus the `piper` process reading, if any), with **Start Piper**, **Stop Piper** and **Restart Piper**.
+  When the tray launches, it starts the server if it is offline.
+  If another Piper server is already running outside the tray, the tray shows it as external and disables Stop, so it never kills a process it does not manage.
+- **Kokoro** (optional): status and live memory from its `/health` on `127.0.0.1:7478`: **Running** (with the model loaded or unloaded), **Not installed (optional)** until it has answered once on this machine, or **Not reachable** after that (for example when WSL is off).
+  The tray never starts or stops Kokoro: that would mean calling `wsl.exe`, which boots the WSL VM.
+  Manage it with `systemctl --user` in WSL (see `servers/kokoro`).
+- **Memory report**: builds and opens a self-contained HTML report with 24-hour and 7-day memory timelines per engine (see the repo README, "Memory history and reports").
+- **Record memory history** (off by default): samples each engine's memory once a minute into daily CSV files in the tray's app data folder, kept for 30 days.
+- **Open Piper Voices Folder**, **Launch at login**, **Quit**.
+
+The tooltip reads like `VoiceDock | Piper 22 MB · Kokoro 47 MB (model unloaded)`.
+
+Tray files:
+
+| What | Where |
+| --- | --- |
+| Settings (`memoryHistory.enabled`, `intervalSeconds`, `keepDays`) | `%APPDATA%\VoiceDock\tray-settings.json` (macOS `~/Library/Application Support/VoiceDock`, Linux `~/.config/voicedock`) |
+| Memory history and `memory-report.html` | `memory\` in that folder |
+| Tray log | `servers/piper/logs/voicedock-tray.log` |
+
+> The tray was called **Piper TTS Tray** up to VoiceDock 1.1, with a `Piper TTS Tray` startup shortcut.
+> On its first start the VoiceDock tray replaces that shortcut with `VoiceDock Tray` (keeping launch at login on), and the old launchers `scripts/start-piper-tray.vbs` and `.bat` still work: they start the VoiceDock tray.
+> The older PowerShell-only tray (`scripts/piper-tray-windows.ps1`) is gone; the Node tray replaced it.
+
+Install or remove Windows sign-in startup (the tray's **Launch at login** does the same):
 
 ```powershell
 npm run install:windows:tray
@@ -126,10 +150,10 @@ The Unix launcher is POSIX-shell syntax checked in this repo. Runtime verificati
 
 ### `GET /health`
 
-Returns `200 OK` if the server is running.
+Returns `200 OK` if the server is running, with its memory (see [`docs/API.md`](../../docs/API.md#get-health) for every field).
 
 ```json
-{ "status": "ok", "version": "1.0.0" }
+{ "status": "ok", "engine": "piper", "version": "1.0.0", "rssMb": 22.4, "totalRssMb": 22.4, "speaking": false, "readers": [] }
 ```
 
 ### `POST /tts`
@@ -158,7 +182,7 @@ Generate speech from text.
 List available voice models in the `piper/voices/` directory.
 
 ```json
-{ "voices": ["en_US-amy-medium.onnx", "en_GB-alan-medium.onnx"] }
+{ "engine": "piper", "voices": ["en_US-amy-medium.onnx", "en_GB-alan-medium.onnx"], "defaultVoice": "en_US-ryan-high.onnx" }
 ```
 
 ---
@@ -190,10 +214,10 @@ start test.wav
 → Check that your `.onnx` and `.onnx.json` files are both present in `piper/voices/`.
 
 **Server won't start**  
-→ Port 7477 may be in use. Change `PORT` at the top of `server.js`.
+→ Port 7477 may be in use. Start it on another port with `PORT=7577 npm start` (the extension expects 7477).
 
 **Chrome extension says "Offline"**  
-→ Make sure the server is running (`npm start`). It must be running before the extension can use local Piper TTS.
+→ Make sure the server is running (`npm start`). It must be running before the extension can use Piper.
 
 ---
 
