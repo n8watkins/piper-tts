@@ -87,8 +87,9 @@ It only touches `extension/`, never a server or its downloaded binaries and voic
 Reload at `chrome://extensions` afterward.
 
 The committed `extension/dist` bundles must always match `extension/src`.
-A tracked pre-commit hook (`tools/hooks/pre-commit`) rebuilds and re-stages them, and CI fails if they drift.
-`npm install` enables the hook through the `prepare` script, or run `git config core.hooksPath tools/hooks`.
+A tracked pre-commit hook (`.githooks/pre-commit`) rebuilds and re-stages them, and CI fails if they drift.
+`npm install` enables the hook through the `prepare` script, or run `git config core.hooksPath .githooks`.
+The same folder holds release-kit's `commit-msg` and `pre-push` hooks.
 
 Commits follow Conventional Commits and releases are cut with `npm run release` (see [RELEASING.md](RELEASING.md)).
 The servers are versioned separately from the extension.

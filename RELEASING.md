@@ -13,12 +13,25 @@ type(scope): subject
 - `fix`: a bug fix a user would notice.
 - `perf`: faster or lighter, same behavior.
 - `security`: hardening a user would want to know about (a checksum, a tighter policy).
+- `revert`: takes back an earlier change users saw (`revert: dark mode`); it is listed in the notes under Reverted.
 - `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `style`: everything else; these stay out of the release notes.
 - Add `!` after the type (`feat!: ...`) or a `BREAKING CHANGE:` line in the body for a breaking change.
 - The scope is optional: `fix(popup): ...`.
 - Write the subject as a change, lowercase, no trailing period: `feat: add dark mode`, not `Added dark mode.`.
 
 The `commit-msg` hook checks this locally, and the Commit messages workflow checks every pushed commit.
+
+### Pull requests
+
+A squash merge turns the pull request into one commit whose message is the pull request's title, so the Commit messages workflow checks the title too, and checks it again when it is edited.
+Write the title like a commit subject: `feat: add dark mode`.
+Put any `Release-note:` or `BREAKING CHANGE:` line in the description, and set the repo to use the title and description for squash commits (Settings, General, "Default commit message": "Pull request title and description"), or with the gh CLI:
+
+```sh
+gh api -X PATCH repos/{owner}/{repo} -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY
+```
+
+GitHub's own default uses the commit message instead of the title when a pull request has one commit, and the commit list as the description, where a stray `Release-note:` line from one commit could reword the whole change.
 
 ## Writing for the release notes
 
@@ -67,6 +80,10 @@ npm run release -- --push      # check, bump, changelog, commit, tag, push
 - Force one with `npm run release -- minor` (or `patch`, `major`, or an exact `1.4.0`).
 - It bumps `package.json`, `package-lock.json` and any file listed in `.release.json` `versionFiles`, adds a section to `CHANGELOG.md`, commits `chore(release): vX.Y.Z` and tags it.
 - With `--push` it first makes sure `main` isn't behind `origin/main` and runs `npm run release:check` (skip that with `--no-check`), so a tag is only pushed for a commit that passes. If the push is rejected, the release commit and tag are undone.
+  On a branch that takes changes only through pull requests, it releases through one instead (see [Protecting the branch and the tags](#protecting-the-branch-and-the-tags)).
+- Releases are cut from `main` or `master`; a repo that ships from another long-lived branch lists it in `.release.json` `branches` (for example `["master", "release/1.x"]`).
+  The Commit messages workflow checks pushes to those branches as well as `main` and `master`: rerun apply after changing the list (`npx release-kit apply .` in a package-mode repo, where `npm run release:check` warns until you do).
+  The release train still runs on `main` or `master` only.
 - The changelog date is today in `.release.json` `timeZone` (for example `"America/Los_Angeles"`), or in the machine's time zone; set it when the release train cuts releases, because CI runs in UTC.
 - Edit the new `CHANGELOG.md` section before pushing if a line needs rewording (`git commit --amend`, then move the tag with `git tag -f -a --cleanup=verbatim vX.Y.Z` and paste the new section as its message).
   Never move a tag after it is pushed: the next release would start from the wrong place, and the kit stops when it finds one moved.
@@ -78,7 +95,13 @@ Pushing the tag runs `.github/workflows/release.yml`:
 3. `npm run release:artifacts`, if defined, writes shippable files into `release-artifacts/`; they get SHA-256 checksums.
 4. The GitHub Release is created with the generated notes and the files, and the uploaded files are re-downloaded and checked.
 
-If a Release run fails after the tag is pushed (a flaky check, an outage), fix the cause and run the Release workflow again on the tag: Actions, Release, "Run workflow", and pick the tag under "Use workflow from".
+If a Release run fails after the tag is pushed (a flaky check, an outage), fix the cause and retry; the workflow is safe to run again:
+
+- **Re-run failed jobs** on the failed run is the usual retry.
+  It keeps the run's build, and a release that a failed run already created is finished (notes refreshed, missing files uploaded), not duplicated.
+- **Run workflow** from `main` with the tag in the "tag" box is for when the fix is in the workflow itself, or the run is older than its 14-day build artifacts.
+- If the release already has files that differ from the new build, the run stops instead of replacing files people may have downloaded; delete those files (or the release) first.
+
 Don't delete and re-push the tag.
 
 ## The release train
@@ -87,7 +110,7 @@ If this repo has `.github/workflows/release-train.yml` (added by `apply.mjs --tr
 Its schedule is in `.release.json` (`train.schedule`, a cron line in UTC).
 
 - On each run it looks at the commits on `main` since the last tag.
-- When at least one is user-facing (`feat`, `fix`, `perf`, `security`, a revert or a breaking change), it runs `npm run release:check` on that commit, then makes the release commit and tag with the bump the commits call for, exactly like `npm run release`.
+- When at least one is user-facing (`feat`, `fix`, `perf`, `security`, a `revert:` commit or a breaking change), it runs `npm run release:check` on that commit, then makes the release commit and tag with the bump the commits call for, exactly like `npm run release`.
 - If `.release.json` lists `train.checks` (workflow files, such as the ones whose checks branch protection requires on `main`), it pushes the release commit to a temporary `release-train/vX.Y.Z` branch, runs each of them there and waits for them to pass, then deletes the branch. Each of those workflows needs `workflow_dispatch:` in its `on:`.
 - Then it pushes `main` and the tag in one atomic push and makes sure the Release workflow runs on the tag.
 - When there are only docs, chores, tests or refactors, it releases nothing.
@@ -99,9 +122,18 @@ Its schedule is in `.release.json` (`train.schedule`, a cron line in UTC).
 
 GitHub doesn't count checks from runs started with `workflow_dispatch`, the only runs the train's token can start.
 So on a `main` protected by required checks, the train's push is rejected even though `train.checks` passed on that exact commit.
-The fix is a deploy key that the branch's protection lets through, stored as the `RELEASE_TRAIN_KEY` secret; the train's checkout pushes with it when it exists.
+The fix is a deploy key that the branch's rules let through, stored as the `RELEASE_TRAIN_KEY` secret; the train's checkout pushes with it when it exists.
 The train still runs `train.checks` first and pushes only when they pass, so the key never lets an unchecked commit onto `main`.
 A tag pushed with the key starts the Release workflow by itself, and pushing `main` with it runs CI there as usual.
+`npx release-kit protect` (see [Protecting the branch and the tags](#protecting-the-branch-and-the-tags)) makes the key, once, in a repo with a train.
+
+- If `main` moves while it runs, or a check fails, nothing is released and the release commit is thrown away; run it again, or let the next scheduled run pick it up.
+- It stops instead of guessing when there is no release tag yet (run `npm run release -- --baseline` first), when the last tag isn't on `main`, or when `package.json` doesn't match the last tag.
+
+Preview what it would do with `npm run release -- --plan`.
+Releasing by hand still works at any time; the train just finds less to do.
+
+## Protecting the branch and the tags
 
 Set it up once, as an admin, with the gh CLI signed in:
 
@@ -110,13 +142,39 @@ npx release-kit protect --dry-run   # what it will do
 npx release-kit protect
 ```
 
-It creates the ruleset `release-kit: protect main` (no deletion, no force push, the required checks that classic protection had, or `--checks "CI result,check"`), lets the deploy key and repository admins bypass it (`--no-admin-bypass` to drop admins), adds a new write deploy key `release-kit train` with its private half only in the secret, and then removes classic branch protection, which a deploy key can't bypass.
-Run it again to rotate the key.
-- If `main` moves while it runs, or a check fails, nothing is released and the release commit is thrown away; run it again, or let the next scheduled run pick it up.
-- It stops instead of guessing when there is no release tag yet (run `npm run release -- --baseline` first), when the last tag isn't on `main`, or when `package.json` doesn't match the last tag.
+It writes two GitHub rulesets:
 
-Preview what it would do with `npm run release -- --plan`.
-Releasing by hand still works at any time; the train just finds less to do.
+- **`release-kit: branches`**, on the default branch and any other branch in `.release.json` `branches`: no deletion, no force push, changes only through a pull request (no approvals needed), and the repo's CI checks must pass.
+- **`release-kit: release tags`**, on `refs/tags/v*`: anyone who can push may create a release tag, nobody may delete or move one.
+
+The required checks are, in order: `--checks "CI result,check / check"`, `"protect": { "checks": [...] }` in `.release.json`, the ones the ruleset already requires (a rerun keeps them), or else the GitHub Actions checks that passed on the latest merged pull request.
+That last way leaves out workflows that run on only some pull requests (a `paths` filter, like the security scan's, or auto-merge), and in a workflow with a `CI result` job (see CI lanes) only that job is required, since it stands for the others.
+
+When it requires checks, protect also allows auto-merge on the repo, so `.github/workflows/auto-merge.yml` can merge release-kit updates and Dependabot patch and minor updates once those checks pass; a major update waits for a person.
+The required checks should cover all of CI: GitHub's auto-merge waits for nothing else.
+
+Nobody bypasses the branch rules, admins included, so a coding agent signed in as an admin can't push to `main` either.
+Releases still work:
+
+- `npm run release -- --push` tries its usual push; when the rules reject it, it pushes the release commit to a `release/vX.Y.Z` branch, opens a pull request, merges it once its checks pass (up to `--pr-timeout`, default 30 minutes), and tags the merged commit.
+  If a check fails, it closes the pull request and undoes the release commit, so nothing is tagged.
+  `--via-pr` goes straight to the pull request, and `npm run release -- --dry-run --push` says which path it will take.
+- With a release train, the train's deploy key may bypass the branch rules (see [A protected main](#a-protected-main)); `--rotate-key` replaces the key.
+- `--admin-bypass` lets repository admins push straight to the branch again, for a repo that wants that trade-off.
+
+`npm run release:check` warns when the rulesets drift from what protect would set (a rule removed by hand, a different bypass list, other required checks than `.release.json` names), whenever gh can read them.
+Rulesets need a public repo, or GitHub Pro for a private one.
+
+### A private repo on GitHub Free
+
+There protect sets up the free safeguards instead, and says what GitHub still lets through (see release-kit's [docs/PRIVATE_REPOS.md](https://github.com/n8watkins/release-kit/blob/main/docs/PRIVATE_REPOS.md)):
+
+- **The pre-push guard** (`.githooks/pre-push`) refuses, before anything is sent, a push straight to `main` or a release branch, a force push or deletion of one, and a moved or deleted `v*` tag.
+  Push a branch and open a pull request instead.
+  `npm run release -- --push` still works: the guard recognizes its one release commit, and when the release would carry unpushed work along it goes through a release pull request.
+  In an emergency, `RELEASE_KIT_ALLOW_DIRECT_PUSH=1 git push ...` lets a push through and logs it to `.git/release-kit/direct-push.log`.
+- **The Direct push alarm** (`.github/workflows/direct-push.yml`) checks every push to those branches on GitHub; a commit that came from no merged pull request, a force push or a moved tag fails the run and opens an issue labeled `release-kit: direct push`.
+- **Merge when green** (`.github/workflows/auto-merge.yml`) merges update pull requests once every check has passed.
 
 ## Baselines and backfills
 

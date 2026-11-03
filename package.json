@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "prepare": "git config core.hooksPath tools/hooks || true",
+    "prepare": "git config core.hooksPath .githooks || true",
     "build": "node tools/build-extension-ui.mjs",
     "test": "node --test && npm run test:kokoro",
     "version:patch": "node tools/bump-version.mjs patch",
@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.0",
-    "release-kit": "github:n8watkins/release-kit#v2.0.0"
+    "release-kit": "github:n8watkins/release-kit#v2.5.2"
   },
   "engines": {
     "node": ">=18"
