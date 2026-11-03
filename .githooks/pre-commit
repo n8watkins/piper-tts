@@ -6,7 +6,7 @@
 # forget to rebuild, and commit a stale bundle. This rebuilds and re-stages the
 # bundles whenever a change that could affect them is part of the commit.
 #
-# Enabled with: git config core.hooksPath tools/hooks
+# Enabled with: git config core.hooksPath .githooks
 set -e
 
 # Skip the (small but non-zero) build cost unless the UI sources or the build

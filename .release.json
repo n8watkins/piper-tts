@@ -2,5 +2,7 @@
   "versionFiles": [
     "extension/manifest.json"
   ],
-  "workflows": "package"
+  "workflows": "package",
+  "repository": "n8watkins/voicedock",
+  "visibility": "public"
 }
