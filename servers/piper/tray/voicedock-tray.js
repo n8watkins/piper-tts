@@ -100,11 +100,21 @@ const ICON_ONLINE = iconB64('online');
 const ICON_OFFLINE = iconB64('offline');
 
 // ─── Piper server lifecycle ──────────────────────────────────────────────────
-const managedPid = () => {
+// The pid recorded for the server a tray started (this run or an earlier one).
+const filePid = () => {
   try {
     const pid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
     return pid && isAlive(pid) ? pid : null;
   } catch { return null; }
+};
+// The server child this tray run spawned, while it runs (cleared on exit).
+let ownChild = null;
+// Ours only while our child runs or the answering server reports the recorded
+// pid: a bare pid file could name a reused pid (see core.isManagedServer).
+const managedPid = (health) => {
+  const pid = filePid();
+  const ownChildAlive = !!ownChild && ownChild.exitCode === null && ownChild.signalCode === null;
+  return core.isManagedServer({ filePid: pid, health, ownChildAlive }) ? (ownChildAlive ? ownChild.pid : pid) : null;
 };
 function startServer() {
   const out = fs.openSync(path.join(LOG_DIR, 'piper-tts-server.log'), 'a');
@@ -114,13 +124,21 @@ function startServer() {
     cwd: SERVER_DIR, detached: true, windowsHide: true, stdio: ['ignore', out, out],
   });
   try { fs.writeFileSync(PID_FILE, String(child.pid)); } catch { /* ignore */ }
+  ownChild = child;
+  child.once('exit', (code) => {
+    if (ownChild === child) ownChild = null;
+    // Forget the pid as soon as it is gone, before Windows can reuse it.
+    try { if (parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10) === child.pid) fs.unlinkSync(PID_FILE); } catch { /* ignore */ }
+    log(`The Piper server exited: pid ${child.pid}, code ${code}`);
+  });
   child.unref();
   try { fs.closeSync(out); } catch { /* ignore */ } // child keeps its own dup; don't leak our fd
   log(`Started the Piper server: pid ${child.pid}`);
 }
-function stopServer() {
-  const pid = managedPid();
+async function stopServer() {
+  const pid = managedPid(await core.fetchHealth(HOST, PORT));
   if (pid) { try { process.kill(pid); log(`Stopped the Piper server: pid ${pid}`); } catch { /* ignore */ } }
+  else if (filePid()) log('Not stopping: the recorded pid is not the Piper server that answers (pid reused, or the server is gone)');
   try { fs.unlinkSync(PID_FILE); } catch { /* ignore */ }
 }
 // Is something already listening on the port? (Used so a restart waits for the
@@ -312,7 +330,7 @@ async function refresh() {
       core.fetchHealth(core.KOKORO_HOST, core.KOKORO_PORT),
     ]);
     const online = !!piper;
-    const managed = managedPid() !== null;
+    const managed = managedPid(piper) !== null;
     if (kokoro && !settings.kokoroSeen) updateSettings({ kokoroSeen: true });
 
     // Crash supervision: if we wanted it up and it died (not just starting), restart.
@@ -348,12 +366,11 @@ async function refresh() {
 systray.onClick((action) => {
   switch (action.item && action.item.title) {
     case T.start: intendedRunning = true; restarts = 0; startServerSafely(); setTimeout(refresh, 1200); break;
-    case T.stop: intendedRunning = false; stopServer(); setTimeout(refresh, 800); break;
+    case T.stop: intendedRunning = false; stopServer().finally(() => setTimeout(refresh, 800)); break;
     case T.restart:
       intendedRunning = true; restarts = 0;
-      stopServer();
-      startServerSafely(); // waits for the port to free before starting
-      setTimeout(refresh, 1500);
+      // startServerSafely waits for the port to free before starting.
+      stopServer().then(startServerSafely).finally(() => setTimeout(refresh, 1500));
       break;
     case T.voices: openVoices(); break;
     case T.report: openMemoryReport(); break;
@@ -394,8 +411,9 @@ systray.ready().then(async () => {
   }
   loginItem.checked = autostartJustInstalled || isAutostartInstalled();
   pushItem(loginItem);
-  if (!(await core.fetchHealth(HOST, PORT))) { intendedRunning = true; startServerSafely(); } // auto-start if offline
-  else { intendedRunning = managedPid() !== null; }
+  const health = await core.fetchHealth(HOST, PORT);
+  if (!health) { intendedRunning = true; startServerSafely(); } // auto-start if offline
+  else { intendedRunning = managedPid(health) !== null; }
   applyHistorySetting();
   await refresh();
   setInterval(refresh, REFRESH_MS);

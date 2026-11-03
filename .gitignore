@@ -9,7 +9,9 @@ servers/piper/piper/piper.exe
 servers/piper/piper/piper
 servers/piper/piper/voices/*.onnx
 servers/piper/piper/voices/*.onnx.json
-# Named node.exe copy that N8 Tray's n8piper wrapper creates beside server.js
+# Named node.exe copies that N8 Tray creates beside server.js: n8voice's
+# (VoiceDock module) and the retired n8piper's
+servers/piper/voicedock-piper.exe
 servers/piper/piper-tts-server.exe
 
 # Generated audio output

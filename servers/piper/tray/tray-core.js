@@ -108,6 +108,21 @@ function tooltipText(piperHealth, kokoroHealth, kokoroSeen) {
   return text.length > 127 ? `${text.slice(0, 126)}…` : text;
 }
 
+/**
+ * Whether the Piper server is the one this tray started, so Stop and Restart
+ * may act on it. A pid file alone is not proof: after a crash, Windows can
+ * hand the same pid to an unrelated process, and killing it would be wrong.
+ * It is ours while the child this tray spawned is still running (it may not
+ * answer yet while it starts), or when the server that answers /health
+ * reports the pid recorded in the pid file (a server a previous tray run
+ * started).
+ */
+function isManagedServer({ filePid = null, health = null, ownChildAlive = false } = {}) {
+  if (ownChildAlive) return true;
+  if (!filePid || !health) return false;
+  return Number(health.pid) === Number(filePid);
+}
+
 /** Where the "Launch at login" entry lives, and where the old Piper TTS one lived. */
 function autostartPaths(platform = process.platform, env = process.env, home = os.homedir()) {
   if (platform === 'win32') {
@@ -125,4 +140,5 @@ function autostartPaths(platform = process.platform, env = process.env, home = o
 module.exports = {
   KOKORO_HOST, KOKORO_PORT, DEFAULT_SETTINGS, appDataDir, loadSettings, saveSettings, fetchHealth,
   piperMemoryText, kokoroMemoryText, piperStatusText, kokoroStatusText, tooltipText, autostartPaths,
+  isManagedServer,
 };

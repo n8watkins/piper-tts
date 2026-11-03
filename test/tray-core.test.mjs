@@ -30,6 +30,15 @@ test('Kokoro status is running, not installed or not reachable, never a WSL call
   assert.equal(core.kokoroStatusText(null, true), 'Kokoro: Not reachable');
 });
 
+test('a Piper server is only ours while our child runs or /health reports the recorded pid', () => {
+  assert.equal(core.isManagedServer({ ownChildAlive: true }), true, 'starting, not answering yet');
+  assert.equal(core.isManagedServer({ filePid: 4242, health: { ...PIPER, pid: 4242 } }), true, 'started by an earlier tray run');
+  assert.equal(core.isManagedServer({ filePid: 4242, health: null }), false, 'pid file names a reused pid while Piper is down');
+  assert.equal(core.isManagedServer({ filePid: 4242, health: { ...PIPER, pid: 999 } }), false, 'another server answers');
+  assert.equal(core.isManagedServer({ filePid: 4242, health: { status: 'ok' } }), false, 'a server without a pid field');
+  assert.equal(core.isManagedServer(), false);
+});
+
 test('the tooltip names both engines and stays within the Windows limit', () => {
   assert.equal(core.tooltipText(PIPER, KOKORO, true), 'VoiceDock | Piper 22 MB · Kokoro 47 MB (model unloaded)');
   assert.equal(core.tooltipText(null, null, false), 'VoiceDock | Piper stopped');
