@@ -16,6 +16,9 @@ const { readHistory } = require('./memory-history');
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
 const RANGES = [
+  // The last hour shows single load / read / release cycles (Kokoro's idle
+  // release is 10 minutes); 24 hours and 7 days show the patterns.
+  { id: '1h', label: 'Last hour', ms: HOUR, buckets: 360 },
   { id: '24h', label: 'Last 24 hours', ms: DAY, buckets: 480 },
   { id: '7d', label: 'Last 7 days', ms: 7 * DAY, buckets: 504 },
 ];
@@ -120,13 +123,18 @@ function niceMax(v) {
   const unit = gb ? 1024 : 1;
   const rawStep = (v * 1.08) / unit / 4;
   const mag = 10 ** Math.floor(Math.log10(rawStep));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((m) => m >= rawStep);
+  const step = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10].map((m) => m * mag).find((m) => m >= rawStep);
   return step * 4 * unit;
 }
 
 function timeTicks(from, to, range) {
   const ticks = [];
-  if (range.id === '24h') {
+  if (range.id === '1h') {
+    const d = new Date(from); d.setSeconds(0, 0);
+    let t = d.getTime() + 60000;
+    while (new Date(t).getMinutes() % 10) t += 60000;
+    for (; t <= to; t += 10 * 60000) ticks.push({ t, label: fmtTime(t) });
+  } else if (range.id === '24h') {
     const d = new Date(from); d.setMinutes(0, 0, 0);
     let t = d.getTime() + HOUR;
     while (new Date(t).getHours() % 3) t += HOUR;
@@ -224,7 +232,7 @@ function chartSvg(rows, engine, range, from, to, chartId) {
 }
 
 function statTable(rows, from, to, engines) {
-  const head = '<tr><th scope="col">Engine</th><th scope="col">Peak</th><th scope="col">Average</th><th scope="col">Idle</th><th scope="col">Latest</th><th scope="col">Model loaded</th><th scope="col">Loads</th><th scope="col">Unloads</th><th scope="col">Speaks</th><th scope="col">Restarts</th></tr>';
+  const head = '<tr><th scope="col">Engine</th><th scope="col">Peak</th><th scope="col">Average</th><th scope="col">Idle</th><th scope="col">Latest</th><th scope="col">Model loaded</th><th scope="col">Loads</th><th scope="col">Unloads</th><th scope="col">Speaks</th><th scope="col">Starts</th></tr>';
   const body = engines.map((engine) => {
     const s = computeStats(rows, engine.id, from, to);
     const kokoro = engine.id === 'kokoro';
@@ -346,7 +354,9 @@ function buildReport(rows, { now = Date.now(), source = '' } = {}) {
   const engines = ENGINES.filter((e) => e.id !== 'wsl' || rows.some((r) => r.engine === 'wsl'));
   const chartData = {};
   const first = rows.length ? rows[0].t : null;
-  const sections = RANGES.map((range, ri) => {
+  // Open on the last 24 hours, or on the last hour while the history is younger than that.
+  const defaultRange = first != null && now - first <= HOUR ? '1h' : '24h';
+  const sections = RANGES.map((range) => {
     const from = now - range.ms;
     const inRange = rows.filter((r) => r.t >= from && r.t <= now);
     let body;
@@ -364,14 +374,14 @@ function buildReport(rows, { now = Date.now(), source = '' } = {}) {
       body = statTable(rows, from, now, engines) + legendHtml() + cards +
         `<details><summary>Model loads, unloads and restarts</summary>${eventTable(rows, from, now)}</details>`;
     }
-    return `<section class="range" id="${range.id}"${ri ? ' hidden' : ''} aria-label="${esc(range.label)}"><h2>${esc(range.label)}</h2><p class="note">${esc(fmtWhen(from))} to ${esc(fmtWhen(now))}. Idle is the median memory while nothing was loaded (Kokoro) or across all samples (Piper, WSL).</p>${body}</section>`;
+    return `<section class="range" id="${range.id}"${range.id === defaultRange ? '' : ' hidden'} aria-label="${esc(range.label)}"><h2>${esc(range.label)}</h2><p class="note">${esc(fmtWhen(from))} to ${esc(fmtWhen(now))}. Idle is the median memory while nothing was loaded (Kokoro) or across all samples (Piper, WSL).</p>${body}</section>`;
   }).join('');
   const meta = rows.length
     ? `${rows.length.toLocaleString('en-US')} ${rows.length === 1 ? 'row' : 'rows'} from ${esc(fmtWhen(first))} to ${esc(fmtWhen(rows[rows.length - 1].t))}${source ? ` in ${esc(source)}` : ''}. Generated ${esc(fmtWhen(now))}.`
     : `No memory history yet${source ? ` in ${esc(source)}` : ''}. Turn on memory history in the tray and check back later. Generated ${esc(fmtWhen(now))}.`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VoiceDock Memory</title><style>${STYLE}</style></head><body><main>` +
     `<h1>VoiceDock memory</h1><p class="meta">${meta}</p>` +
-    `<div class="tabs" role="tablist">${RANGES.map((r, i) => `<button type="button" role="tab" data-range="${r.id}" aria-selected="${i === 0}">${esc(r.label)}</button>`).join('')}</div>` +
+    `<div class="tabs" role="tablist">${RANGES.map((r) => `<button type="button" role="tab" data-range="${r.id}" aria-selected="${r.id === defaultRange}">${esc(r.label)}</button>`).join('')}</div>` +
     sections +
     `</main><script type="application/json" id="chart-data">${JSON.stringify(chartData).replace(/</g, '\\u003c')}</script><script>${SCRIPT}</script></body></html>`;
 }
