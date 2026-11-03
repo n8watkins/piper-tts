@@ -38,7 +38,7 @@ The extension expects the defaults.
 ```json
 {
   "status": "ok", "engine": "kokoro", "version": "1.0.0", "voices": 54,
-  "modelLoaded": false, "speaking": false, "rssMb": 46.9, "pid": 4242,
+  "modelLoaded": false, "modelLoading": false, "speaking": false, "rssMb": 46.9, "pid": 4242,
   "startedAt": "2026-11-02T18:00:00Z", "modelLoadedAt": "2026-11-02T18:05:12Z",
   "modelUnloadedAt": "2026-11-02T18:15:20Z", "lastSpeakAt": "2026-11-02T18:05:19Z",
   "idleSeconds": 640, "idleUnloadSeconds": 600
@@ -56,6 +56,7 @@ The extension expects the defaults.
 | `lastSpeakAt` | ISO 8601 UTC string or null | When the last `/tts` synthesis started (`null`: none since start). |
 | `voices` | number | Kokoro only: how many voices are available. |
 | `modelLoaded` | boolean | Kokoro only: whether the model is in memory right now. `false` is normal: the model loads on the first `/tts` request (adding 1-3 s to it) and is released after an idle period. Checking `/health` never loads it. |
+| `modelLoading` | boolean | Kokoro only: the model is being loaded right now (the first `/tts` after a release). `/health` keeps answering while it loads. |
 | `modelLoadedAt`, `modelUnloadedAt` | ISO 8601 UTC string or null | Kokoro only: when the model was last loaded and released (`null`: not since start). |
 | `idleSeconds` | number | Kokoro only: seconds since the last `/tts` finished (since start if none; `0` while speaking). |
 | `idleUnloadSeconds` | number | Kokoro only: the configured idle period before the model is released (`0` = never). |
