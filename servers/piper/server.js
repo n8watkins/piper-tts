@@ -3,7 +3,8 @@
  *
  * Runs on http://127.0.0.1:7477 by default and speaks the shared VoiceDock
  * API (docs/API.md in the repo root):
- * GET  /health                  → { status, engine: "piper", version, rssMb, readers, ... }
+ * GET  /health                  → { status, engine: "piper", version, rssMb, readers, ...,
+ *                                   listen: "127.0.0.1:7477", exposed: false }
  * GET  /voices                  → { engine, voices, defaultVoice, sizes, voiceDir }
  * POST /tts  { "text": "..." }  → audio/wav
  *
@@ -24,7 +25,7 @@ const { version } = require("./package.json");
 const { serverRssMb, createReaderTracker } = require("./memory");
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const { PORT, HOST } = require("./config"); // shared with the tray so they agree
+const { PORT, HOST, isLoopbackHost, exposureWarning } = require("./config"); // shared with the tray so they agree
 const MAX_CHARS  = 8000;        // reasonable limit per request
 const TIMEOUT_MS = 60_000;      // kill Piper if it hangs
 
@@ -73,7 +74,18 @@ app.use(express.json({ limit: "1mb" }));
 const readers = createReaderTracker();
 const startedAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 
-app.get("/health", (_req, res) => {
+// Where the server listens, from the listening socket itself (so a test or
+// embedder's own listen() is reported correctly), and whether that address is
+// beyond loopback: the server has no authentication.
+function listenInfo(req) {
+  const address = req.socket.server?.address?.();
+  const host = address && typeof address === "object" ? address.address : HOST;
+  const port = address && typeof address === "object" ? address.port : PORT;
+  const shown = host.includes(":") ? `[${host}]` : host;
+  return { listen: `${shown}:${port}`, exposed: !isLoopbackHost(host) };
+}
+
+app.get("/health", (req, res) => {
   const memory = readers.snapshot();
   const rssMb = serverRssMb();
   res.json({
@@ -85,6 +97,7 @@ app.get("/health", (_req, res) => {
     rssMb,
     totalRssMb: Math.round((rssMb + memory.readerRssMb) * 10) / 10,
     ...memory,
+    ...listenInfo(req),
   });
 });
 
@@ -383,6 +396,8 @@ async function start() {
     console.log(`   Voice dir: ${VOICE_DIR}`);
     console.log(`   Default voice: ${DEFAULT_VOICE}`);
     console.log(`\n   Press Ctrl+C to stop.\n`);
+    const warning = exposureWarning(HOST, PORT);
+    if (warning) console.warn(warning + "\n");
   });
 }
 
