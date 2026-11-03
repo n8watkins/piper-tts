@@ -268,7 +268,11 @@ class KokoroEngine:
         self._kokoro = None
         self._active = 0  # synthesis calls in flight
         self._last_used = clock()
+        # _lock guards the state and is only ever held briefly, so /health never
+        # waits on a load; _load_lock serializes the 1-3 s model loads.
         self._lock = threading.Lock()
+        self._load_lock = threading.Lock()
+        self._loading = False
         self._wake = threading.Event()
         self._stopped = False
         if start_reaper and self._idle_unload_seconds > 0:
@@ -284,18 +288,39 @@ class KokoroEngine:
     def is_loaded(self) -> bool:
         return self._kokoro is not None
 
-    def synthesize(self, text: str, voice: str, speed: float, lang: str) -> bytes:
-        with self._lock:
-            if self._kokoro is None:
+    def _ensure_loaded(self) -> None:
+        """Load the model if it isn't, without holding _lock during the load."""
+        with self._load_lock:
+            if self._kokoro is not None:
+                return
+            with self._lock:
+                self._loading = True
+            try:
                 started = time.monotonic()
                 print(f"[kokoro] loading model {self._model_path.name} ...", flush=True)
-                self._kokoro = self._loader(self._model_path, self._voices_path)
-                self._loaded_at = self._wall_clock()
+                kokoro = self._loader(self._model_path, self._voices_path)
                 print(f"[kokoro] model loaded in {time.monotonic() - started:.1f} s", flush=True)
-                self._wake.set()  # let the reaper start counting idle time
-            kokoro = self._kokoro
-            self._active += 1
-            self._last_speak_at = self._wall_clock()
+            finally:
+                with self._lock:
+                    self._loading = False
+            with self._lock:
+                self._kokoro = kokoro
+                self._loaded_at = self._wall_clock()
+                # A fresh load is not idle: the reaper must not release it
+                # before the request that loaded it has started.
+                self._last_used = self._clock()
+            self._wake.set()  # let the reaper start counting idle time
+
+    def synthesize(self, text: str, voice: str, speed: float, lang: str) -> bytes:
+        while True:
+            self._ensure_loaded()
+            with self._lock:
+                kokoro = self._kokoro
+                if kokoro is None:
+                    continue  # released between the load and here: load again
+                self._active += 1
+                self._last_speak_at = self._wall_clock()
+                break
         try:
             samples, sample_rate = kokoro.create(text, voice=voice, speed=speed, lang=lang)
         finally:
@@ -338,6 +363,7 @@ class KokoroEngine:
             idle = 0.0 if speaking else max(0.0, self._clock() - self._last_used)
             return {
                 "modelLoaded": loaded,
+                "modelLoading": self._loading,
                 "speaking": speaking,
                 "rssMb": self._rss_mb(),
                 "pid": os.getpid(),

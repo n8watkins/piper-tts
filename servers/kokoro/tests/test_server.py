@@ -385,6 +385,36 @@ class LazyEngineTests(unittest.TestCase):
         self.gate.set()
         worker.join(5)
 
+    def test_health_answers_while_the_model_loads(self):
+        gate = threading.Event()
+        loading = threading.Event()
+
+        def slow_loader(model_path, voices_path):
+            loading.set()
+            gate.wait(5)
+            return FakeKokoro()
+
+        engine = self.engine(loader=slow_loader)
+        worker = threading.Thread(target=engine.synthesize, args=("hi", "af_heart", 1.0, "en-us"))
+        worker.start()
+        self.assertTrue(loading.wait(5))
+        started = time.monotonic()
+        status = engine.status()
+        self.assertLess(time.monotonic() - started, 0.5, "status() must not wait for the load")
+        self.assertIs(status["modelLoading"], True)
+        self.assertIs(status["modelLoaded"], False)
+        gate.set()
+        worker.join(5)
+        status = engine.status()
+        self.assertIs(status["modelLoading"], False)
+        self.assertIs(status["modelLoaded"], True)
+
+    def test_a_fresh_load_is_not_released_before_its_request_runs(self):
+        engine = self.engine(idle=10)
+        self.clock.now += 3600  # long idle before the first request
+        engine.synthesize("hi", "af_heart", 1.0, "en-us")
+        self.assertFalse(engine.unload_if_idle(), "the load reset the idle clock")
+
     def test_missing_model_files_fail_fast(self):
         self.model_path.unlink()
         with self.assertRaises(SystemExit):
