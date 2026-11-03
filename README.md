@@ -57,7 +57,7 @@ voicedock/                      (VoiceDock)
 ├── docs/
 │   ├── API.md                  The engine API both servers implement
 │   ├── NAMING.md               The VoiceDock name, alternatives, and what a rename touches
-│   └── TRAY_PLAN.md            Plan for one N8 Tray module that runs both engines
+│   └── TRAY_PLAN.md            The n8voice N8 Tray module that runs both engines (built)
 ├── UPDATE_WINDOWS_SERVER.md    How to update the Piper server running on Windows
 ├── test/                       node --test: extension helpers, engine routing, Piper server contract
 └── tools/                      esbuild, version bump, Windows deploy, screenshots, git hooks
@@ -329,7 +329,7 @@ Common causes: no Piper voice downloaded, a missing `piper.exe`, or the Kokoro m
 - [x] Windows tray and one-command Piper setup
 - [x] VoiceDock tray: both engines with live memory, memory history and a memory report
 - [x] Kokoro as a second engine, chosen per profile (1.1)
-- [ ] One N8 Tray module that runs both engines ([docs/TRAY_PLAN.md](docs/TRAY_PLAN.md))
+- [x] One N8 Tray module that runs both engines, `n8voice` ([docs/TRAY_PLAN.md](docs/TRAY_PLAN.md))
 - [ ] Rename the repo and the Chrome Web Store listing ([docs/NAMING.md](docs/NAMING.md))
 - [ ] macOS and Linux real-machine verification of the Piper server
 
