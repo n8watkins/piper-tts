@@ -136,21 +136,25 @@ test('offline stretches become bands, and gaps break the line', () => {
 });
 
 test('niceMax picks round axis tops', () => {
-  assert.equal(report.niceMax(119), 200);
+  assert.equal(report.niceMax(119), 160);
+  assert.equal(report.niceMax(224), 300);
   assert.equal(report.niceMax(600), 800);
   assert.equal(report.niceMax(5860), 8192);
   assert.equal(report.niceMax(0), 100);
 });
 
 test('buildReport is self-contained HTML with charts, stats and event markers', () => {
-  const html = report.buildReport(syntheticRows(), { now: T0 + 3 * 3600000, source: '/x' });
+  const html = report.buildReport(syntheticRows(), { now: T0 + 150 * 60000, source: '/x' });
   assert.match(html, /^<!doctype html>/);
   assert.match(html, /<title>VoiceDock Memory<\/title>/);
-  assert.equal((html.match(/<svg class="chart"/g) || []).length, 4, 'piper + kokoro for 24 h and 7 d');
+  assert.equal((html.match(/<svg class="chart"/g) || []).length, 6, 'piper + kokoro for 1 h, 24 h and 7 d');
+  assert.match(html, /<section class="range" id="24h" aria-label/, 'opens on 24 hours once the history is older than an hour');
   assert.match(html, /Load [A-Z][a-z]{2} [A-Z][a-z]{2} \d+, \d\d:\d\d, 580 MB/);
   assert.match(html, /Not reachable/);
   assert.doesNotMatch(html, /(src|href)="https?:/, 'no network resources');
   assert.doesNotMatch(html, /\u2014/, 'no em dash');
+  const young = report.buildReport(syntheticRows().filter((r) => r.t < T0 + 30 * 60000), { now: T0 + 40 * 60000 });
+  assert.match(young, /<section class="range" id="1h" aria-label/, 'opens on the last hour while the history is young');
   const empty = report.buildReport([], { now: T0 });
   assert.match(empty, /No memory history yet/);
 });

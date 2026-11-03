@@ -288,7 +288,7 @@ Build the report from a folder of these files with:
 npm run memory-report -- /mnt/c/Users/<you>/AppData/Roaming/VoiceDock/memory --open
 ```
 
-It writes `memory-report.html` into that folder: a timeline per engine for the last 24 hours and 7 days with model loads, releases, reads and restarts marked, plus peak, average and idle memory.
+It writes `memory-report.html` into that folder: a timeline per engine for the last hour, 24 hours and 7 days with model loads, releases, reads and restarts marked, plus peak, average and idle memory.
 The file is self-contained (inline SVG, no network), so it can be kept or shared as is.
 
 ---
