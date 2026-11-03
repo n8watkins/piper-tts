@@ -28,6 +28,7 @@ process.env.PIPER_BIN = fakePiper;
 process.env.OUTPUT_DIR = join(voiceDir, 'out');
 
 const { app, isAllowedOrigin } = require('../servers/piper/server.js');
+const { isLoopbackHost, exposureWarning } = require('../servers/piper/config.js');
 const EXT = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop';
 let server;
 let base;
@@ -69,6 +70,49 @@ test('GET /health reports memory without anything reading', async () => {
   assert.equal(body.readerRssMb, 0);
   assert.equal(body.activeVoice, null);
   assert.match(body.startedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+  assert.equal(body.listen, `127.0.0.1:${server.address().port}`);
+  assert.equal(body.exposed, false);
+});
+
+test('isLoopbackHost accepts loopback addresses only', () => {
+  for (const host of ['127.0.0.1', '127.1.2.3', '::1', '[::1]', 'localhost', 'LOCALHOST', '::ffff:127.0.0.1']) {
+    assert.equal(isLoopbackHost(host), true, host);
+  }
+  for (const host of ['0.0.0.0', '::', '', undefined, '192.168.1.20', '10.0.0.5', 'example.com', '::ffff:192.168.1.2']) {
+    assert.equal(isLoopbackHost(host), false, String(host));
+  }
+});
+
+test('a non-loopback bind warns at startup and shows as exposed in /health', async () => {
+  assert.equal(exposureWarning('127.0.0.1', 7477), null);
+  assert.match(exposureWarning('0.0.0.0', 7477), /WARNING: listening on 0\.0\.0\.0:7477, not loopback.*no authentication/);
+
+  const wide = app.listen(0, '0.0.0.0');
+  await new Promise((resolve) => wide.once('listening', resolve));
+  try {
+    const body = await (await fetch(`http://127.0.0.1:${wide.address().port}/health`)).json();
+    assert.equal(body.listen, `0.0.0.0:${wide.address().port}`);
+    assert.equal(body.exposed, true);
+  } finally {
+    wide.close();
+  }
+});
+
+// Each request runs its own piper process with its own output file and no
+// shared model, so concurrent requests are independent (unlike Kokoro, which
+// shares one lazily loaded model and serializes requests).
+test('concurrent /tts requests all succeed', { skip: process.platform === 'win32' }, async () => {
+  const responses = await Promise.all([1, 2, 3, 4].map((i) => fetch(`${base}/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: `Request ${i}.`, voice: 'en_US-test-medium.onnx' }),
+  })));
+  for (const res of responses) {
+    assert.equal(res.status, 200);
+    assert.equal(Buffer.from(await res.arrayBuffer()).subarray(0, 4).toString(), 'RIFF');
+  }
+  const after = await (await fetch(`${base}/health`)).json();
+  assert.deepEqual(after.readers, []);
 });
 
 test('GET /health shows the piper child while it reads', { skip: process.platform === 'win32' }, async () => {

@@ -25,6 +25,7 @@ List them with `git log --oneline <import merge>^2`, where the import merge is t
 - Kokoro server (this): `127.0.0.1:7478`
 
 The server binds `127.0.0.1` only (loopback), never `0.0.0.0`.
+It has no authentication, so a non-loopback `KOKORO_HOST` logs a warning at startup and `/health` reports `"exposed": true`.
 WSL2 mirrors `localhost` to Windows, so a server bound to `127.0.0.1:7478` inside WSL is reachable from Windows Chrome at the same address.
 
 Like the Piper server, it only answers requests that either have no `Origin` header (curl, scripts, native apps) or come from a `chrome-extension://` origin.

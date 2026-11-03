@@ -5,7 +5,8 @@ It speaks the same HTTP API as the VoiceDock Piper server (see
 docs/API.md in the repo root):
 
   GET  /health  -> {"status": "ok", "engine": "kokoro", "version": "...", "voices": 54,
-                    "modelLoaded": false, "rssMb": 11.3, ...memory fields}
+                    "modelLoaded": false, "rssMb": 11.3, ...memory fields,
+                    "listen": "127.0.0.1:7478", "exposed": false}
   GET  /voices  -> {"engine": "kokoro", "voices": [...]}
   POST /tts     -> body {"text": "...", "voice": "af_heart", "speed": 1.0, "lang": "en-us"}
                    returns audio/wav (16-bit PCM, 24 kHz mono)
@@ -15,7 +16,8 @@ Errors are JSON: {"error": "...", "details": "..."} with a 4xx or 5xx status.
 Binds 127.0.0.1:7478 by default (Piper owns 7477). WSL2 mirrors localhost to
 Windows, so a server bound to 127.0.0.1 in WSL is reachable from Windows at the
 same address. Bind to loopback only (never 0.0.0.0): it keeps the model off the
-LAN.
+LAN. The server has no authentication, so a non-loopback KOKORO_HOST logs a
+warning at startup and /health reports "exposed": true.
 
 Origin policy (same as the Piper server): requests without an Origin header
 (curl, scripts, native apps) and requests from chrome-extension:// origins are
@@ -37,6 +39,7 @@ import ctypes
 import ctypes.util
 import gc
 import io
+import ipaddress
 import json
 import os
 import sys
@@ -115,6 +118,33 @@ def is_allowed_origin(origin: str | None) -> bool:
     if not origin:
         return True
     return origin.startswith("chrome-extension://")
+
+
+def is_loopback_host(host: str) -> bool:
+    """True for addresses only this machine can reach: 127.0.0.0/8, ::1, localhost.
+
+    An empty host or 0.0.0.0 / :: means every interface, so it is not loopback.
+    """
+    host = host.strip().strip("[]").lower()
+    if host == "localhost":
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False  # a hostname (or "") may resolve to a LAN address
+    mapped = getattr(address, "ipv4_mapped", None)  # ::ffff:127.0.0.1
+    return (mapped or address).is_loopback
+
+
+def exposure_warning(host: str, port: int) -> str | None:
+    """The startup warning for a non-loopback bind, or None when loopback."""
+    if is_loopback_host(host):
+        return None
+    return (
+        f"[kokoro] WARNING: listening on {host or '0.0.0.0'}:{port}, not loopback. "
+        "This server has no authentication: anything that can reach this address "
+        "can use it. Set KOKORO_HOST=127.0.0.1 unless you mean to expose it."
+    )
 
 
 class Engine(Protocol):
@@ -266,12 +296,18 @@ class KokoroEngine:
         self._last_speak_at: float | None = None
         self._voices = read_voice_names(voices_path)
         self._kokoro = None
-        self._active = 0  # synthesis calls in flight
+        self._active = 0  # synthesis requests in flight, including queued ones
         self._last_used = clock()
-        # _lock guards the state and is only ever held briefly, so /health never
-        # waits on a load; _load_lock serializes the 1-3 s model loads.
+        # Two locks, never held the other way round:
+        # - _model_lock serializes everything that touches the model: loading
+        #   it, synthesizing with it and releasing it. kokoro-onnx is not safe
+        #   to call from two threads (concurrent create() calls share one
+        #   voices-file reader and fail with BadZipFile), and a load must not
+        #   start while a release is still freeing the previous model.
+        # - _lock guards the bookkeeping and is only ever held briefly, so
+        #   /health never waits on a load or a synthesis.
+        self._model_lock = threading.Lock()
         self._lock = threading.Lock()
-        self._load_lock = threading.Lock()
         self._loading = False
         self._wake = threading.Event()
         self._stopped = False
@@ -289,40 +325,39 @@ class KokoroEngine:
         return self._kokoro is not None
 
     def _ensure_loaded(self) -> None:
-        """Load the model if it isn't, without holding _lock during the load."""
-        with self._load_lock:
-            if self._kokoro is not None:
-                return
+        """Load the model if it isn't; the caller holds _model_lock."""
+        if self._kokoro is not None:
+            return
+        with self._lock:
+            self._loading = True
+        try:
+            started = time.monotonic()
+            print(f"[kokoro] loading model {self._model_path.name} ...", flush=True)
+            kokoro = self._loader(self._model_path, self._voices_path)
+            print(f"[kokoro] model loaded in {time.monotonic() - started:.1f} s", flush=True)
+        finally:
             with self._lock:
-                self._loading = True
-            try:
-                started = time.monotonic()
-                print(f"[kokoro] loading model {self._model_path.name} ...", flush=True)
-                kokoro = self._loader(self._model_path, self._voices_path)
-                print(f"[kokoro] model loaded in {time.monotonic() - started:.1f} s", flush=True)
-            finally:
-                with self._lock:
-                    self._loading = False
-            with self._lock:
-                self._kokoro = kokoro
-                self._loaded_at = self._wall_clock()
-                # A fresh load is not idle: the reaper must not release it
-                # before the request that loaded it has started.
-                self._last_used = self._clock()
-            self._wake.set()  # let the reaper start counting idle time
+                self._loading = False
+        with self._lock:
+            self._kokoro = kokoro
+            self._loaded_at = self._wall_clock()
+        self._wake.set()  # let the reaper start counting idle time
 
     def synthesize(self, text: str, voice: str, speed: float, lang: str) -> bytes:
-        while True:
-            self._ensure_loaded()
-            with self._lock:
-                kokoro = self._kokoro
-                if kokoro is None:
-                    continue  # released between the load and here: load again
-                self._active += 1
-                self._last_speak_at = self._wall_clock()
-                break
+        """Synthesize one request; requests run one at a time, in turn.
+
+        A request that arrives while the model is loading, speaking for
+        another request or being released waits for that to finish, then
+        (re)loads the model if needed.
+        """
+        with self._lock:
+            self._active += 1  # counts as busy while queued: no unload meanwhile
         try:
-            samples, sample_rate = kokoro.create(text, voice=voice, speed=speed, lang=lang)
+            with self._model_lock:
+                self._ensure_loaded()
+                with self._lock:
+                    self._last_speak_at = self._wall_clock()
+                samples, sample_rate = self._kokoro.create(text, voice=voice, speed=speed, lang=lang)
         finally:
             with self._lock:
                 self._active -= 1
@@ -330,19 +365,30 @@ class KokoroEngine:
         return wav_bytes(samples, sample_rate)
 
     def unload_if_idle(self) -> bool:
-        """Release the model if it has been idle long enough; True if released."""
-        with self._lock:
-            if (
-                self._kokoro is None
-                or self._active
-                or self._idle_unload_seconds <= 0
-                or self._clock() - self._last_used < self._idle_unload_seconds
-            ):
-                return False
-            idle = self._clock() - self._last_used
-            self._kokoro = None  # the last reference: no synthesis is in flight
-            self._unloaded_at = self._wall_clock()
-        self._release()
+        """Release the model if it has been idle long enough; True if released.
+
+        Never waits: if a load, synthesis or release holds the model, it is
+        not idle, and the reaper checks again later.
+        """
+        if not self._model_lock.acquire(blocking=False):
+            return False
+        try:
+            with self._lock:
+                if (
+                    self._kokoro is None
+                    or self._active
+                    or self._idle_unload_seconds <= 0
+                    or self._clock() - self._last_used < self._idle_unload_seconds
+                ):
+                    return False
+                idle = self._clock() - self._last_used
+                self._kokoro = None  # the last reference: no synthesis is in flight
+                self._unloaded_at = self._wall_clock()
+            # Still under _model_lock: a request that arrives now waits for the
+            # memory to be returned, then loads the model again.
+            self._release()
+        finally:
+            self._model_lock.release()
         print(f"[kokoro] model released after {idle:.0f} s idle", flush=True)
         return True
 
@@ -458,6 +504,11 @@ def make_handler(engine: Engine) -> type[BaseHTTPRequestHandler]:
                     "voices": len(engine.voices()),
                     "modelLoaded": True,
                 }
+                # Where the server listens and whether that is beyond loopback
+                # (no authentication, so a non-loopback bind is exposed).
+                host, port = self.server.server_address[:2]
+                health["listen"] = f"{host}:{port}"
+                health["exposed"] = not is_loopback_host(host)
                 # Memory and model state; never loads the model.
                 status = getattr(engine, "status", None)
                 if status:
@@ -547,6 +598,9 @@ def main(load_engine: Callable[[], Engine] = KokoroEngine) -> None:
         f"(model loads on the first /tts request, {unload})",
         flush=True,
     )
+    warning = exposure_warning(HOST, PORT)
+    if warning:
+        print(warning, file=sys.stderr, flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

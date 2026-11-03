@@ -139,7 +139,7 @@ The Unix launcher is POSIX-shell syntax checked in this repo. Runtime verificati
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PORT` | `7477` | Local server port. |
-| `HOST` | `127.0.0.1` | Bind address. Keep this as localhost unless you know what you are doing. |
+| `HOST` | `127.0.0.1` | Bind address. Keep this as localhost: the server has no authentication, so any other address logs a startup warning and `/health` reports `"exposed": true`. |
 | `PIPER_BIN` | `piper/piper.exe` on Windows, `piper/piper` elsewhere | Piper executable path. |
 | `VOICE_DIR` | `piper/voices` | Folder containing `.onnx` and `.onnx.json` voice files. |
 | `OUTPUT_DIR` | `output` | Temporary WAV output folder. |

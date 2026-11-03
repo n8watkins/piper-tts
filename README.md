@@ -300,6 +300,14 @@ VoiceDock sends selected text only to servers on your own machine.
 Both servers bind to `127.0.0.1` and reject requests from web pages: only requests from a Chrome extension, or with no `Origin` header at all (curl, scripts), are served.
 So a site you visit can't use your local engines.
 
+The servers have no authentication: the loopback bind is what keeps other machines out.
+Keep the default `HOST` (Piper) and `KOKORO_HOST` (Kokoro) of `127.0.0.1`.
+If either is set to anything other than loopback (`127.0.0.1`, `::1` or `localhost`), for example `0.0.0.0`, the server still starts but logs a warning, and its `/health` reports `"exposed": true` with the address in `listen`.
+Anyone who can reach that address can then use the engine.
+
+The Kokoro server runs one synthesis at a time.
+Requests that arrive together, or while the model is loading or being released, wait their turn instead of failing.
+
 ---
 
 ## Troubleshooting

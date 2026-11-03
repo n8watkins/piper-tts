@@ -13,6 +13,7 @@ The extension expects the defaults.
 ## Conventions
 
 - **Loopback only.** Both servers bind `127.0.0.1` by default, never `0.0.0.0`.
+  They have no authentication, so a non-loopback `HOST` / `KOKORO_HOST` logs a warning at startup and `/health` reports `"exposed": true`.
 - **Origin check.** A request with no `Origin` header (curl, scripts, native apps) or with a `chrome-extension://` origin is allowed.
   Any other browser origin gets `403` on every route, including the `OPTIONS` preflight, so a web page can't use your local engine.
 - **CORS.** For an allowed extension origin the server echoes it in `Access-Control-Allow-Origin` (with `Vary: Origin`).
@@ -31,7 +32,8 @@ The extension expects the defaults.
   "startedAt": "2026-11-02T18:00:00Z", "rssMb": 22.4, "totalRssMb": 108.6,
   "speaking": true, "readers": [{ "pid": 7788, "voice": "en_US-ryan-high.onnx", "rssMb": 86.2 }],
   "readerRssMb": 86.2, "activeVoice": "en_US-ryan-high.onnx",
-  "lastVoice": "en_US-ryan-high.onnx", "lastSpeakAt": "2026-11-02T18:05:19Z", "lastReaderPeakRssMb": 91.0
+  "lastVoice": "en_US-ryan-high.onnx", "lastSpeakAt": "2026-11-02T18:05:19Z", "lastReaderPeakRssMb": 91.0,
+  "listen": "127.0.0.1:7477", "exposed": false
 }
 ```
 
@@ -41,7 +43,7 @@ The extension expects the defaults.
   "modelLoaded": false, "modelLoading": false, "speaking": false, "rssMb": 46.9, "pid": 4242,
   "startedAt": "2026-11-02T18:00:00Z", "modelLoadedAt": "2026-11-02T18:05:12Z",
   "modelUnloadedAt": "2026-11-02T18:15:20Z", "lastSpeakAt": "2026-11-02T18:05:19Z",
-  "idleSeconds": 640, "idleUnloadSeconds": 600
+  "idleSeconds": 640, "idleUnloadSeconds": 600, "listen": "127.0.0.1:7478", "exposed": false
 }
 ```
 
@@ -52,7 +54,7 @@ The extension expects the defaults.
 | `version` | string | The server's own version (the servers are versioned separately from the extension). |
 | `pid`, `startedAt` | number, ISO 8601 UTC string | The server's process id and when it started. |
 | `rssMb` | number or null | The server process's resident memory in MB. For Piper this is the Node server alone; for Kokoro it includes the model when loaded (null where the OS doesn't expose it cheaply; Linux and WSL do). |
-| `speaking` | boolean | A `/tts` request is being synthesized right now. |
+| `speaking` | boolean | A `/tts` request is being synthesized right now. Kokoro runs one synthesis at a time, so for Kokoro this also covers requests waiting their turn. |
 | `lastSpeakAt` | ISO 8601 UTC string or null | When the last `/tts` synthesis started (`null`: none since start). |
 | `voices` | number | Kokoro only: how many voices are available. |
 | `modelLoaded` | boolean | Kokoro only: whether the model is in memory right now. `false` is normal: the model loads on the first `/tts` request (adding 1-3 s to it) and is released after an idle period. Checking `/health` never loads it. |
@@ -63,6 +65,8 @@ The extension expects the defaults.
 | `readers` | array | Piper only: the `piper` processes reading right now, each `{ pid, voice, rssMb }`. Piper starts one per chunk; it loads the voice (60-150 MB) and exits when the chunk is done. `rssMb` is sampled in the background about once a second, so it is `null` for the first quarter second. |
 | `readerRssMb`, `totalRssMb` | number | Piper only: the readers' memory summed, and the server plus the readers. |
 | `activeVoice`, `lastVoice` | string or null | Piper only: the voice being read now (the newest reader), and the last voice read. |
+| `listen` | string | The address and port the server listens on, for example `127.0.0.1:7477`. |
+| `exposed` | boolean | `true` when the server listens beyond loopback (anything other than `127.0.0.0/8`, `::1` or `localhost`). The servers have no authentication, so anything that can reach the address can use them. |
 | `lastReaderPeakRssMb` | number or null | Piper only: the highest memory the last finished reader reached, so a short read still shows what it cost. |
 
 All of these are cheap to compute, so trays can poll `/health` for live memory without loading anything.

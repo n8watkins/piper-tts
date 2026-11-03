@@ -126,6 +126,25 @@ class ApiContractTests(ServerTestCase):
         self.assertEqual(data["version"], server.VERSION)
         self.assertEqual(data["voices"], 3)
         self.assertIs(data["modelLoaded"], True, "engines without status() count as loaded")
+        self.assertEqual(data["listen"], f"127.0.0.1:{self.port}")
+        self.assertIs(data["exposed"], False)
+
+    def test_health_reports_a_non_loopback_bind_as_exposed(self):
+        httpd = server.create_server(self.engine, "0.0.0.0", 0)
+        thread = threading.Thread(target=httpd.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+        thread.start()
+        try:
+            port = httpd.server_address[1]
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("GET", "/health")
+            data = json.loads(conn.getresponse().read())
+            conn.close()
+            self.assertEqual(data["listen"], f"0.0.0.0:{port}")
+            self.assertIs(data["exposed"], True)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=5)
 
     def test_voices_shape(self):
         _, body = self.request("GET", "/voices")
@@ -420,6 +439,118 @@ class LazyEngineTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.engine()
 
+    def test_concurrent_requests_never_overlap_in_the_model(self):
+        # kokoro-onnx is not thread-safe: two create() calls at once share one
+        # voices-file reader and fail with BadZipFile. Requests run in turn.
+        lock = threading.Lock()
+        state = {"now": 0, "peak": 0}
+
+        class CountingKokoro(FakeKokoro):
+            def create(self, text, voice, speed, lang):
+                with lock:
+                    state["now"] += 1
+                    state["peak"] = max(state["peak"], state["now"])
+                time.sleep(0.05)
+                with lock:
+                    state["now"] -= 1
+                return [0.0], server.SAMPLE_RATE
+
+        def loader(model_path, voices_path):
+            self.loads.append(model_path)
+            time.sleep(0.05)  # a slow first load, so every request queues on it
+            return CountingKokoro()
+
+        engine = self.engine(loader=loader)
+        errors = []
+
+        def speak(i):
+            try:
+                engine.synthesize(f"request {i}", "af_heart", 1.0, "en-us")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        workers = [threading.Thread(target=speak, args=(i,)) for i in range(6)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(10)
+        self.assertEqual(errors, [])
+        self.assertEqual(state["peak"], 1, "two syntheses ran at once")
+        self.assertEqual(len(self.loads), 1, "concurrent first requests load the model once")
+
+    def test_a_request_during_an_unload_waits_and_reloads(self):
+        releasing = threading.Event()
+        finish_release = threading.Event()
+        events = []
+
+        def slow_release():
+            events.append("release start")
+            releasing.set()
+            finish_release.wait(5)
+            events.append("release end")
+
+        def loader(model_path, voices_path):
+            events.append("load")
+            return FakeKokoro()
+
+        engine = self.engine(idle=10, loader=loader, release=slow_release)
+        engine.synthesize("hi", "af_heart", 1.0, "en-us")
+        self.clock.now += 10
+        reaper = threading.Thread(target=engine.unload_if_idle)
+        reaper.start()
+        self.assertTrue(releasing.wait(5))
+        result = []
+        worker = threading.Thread(
+            target=lambda: result.append(engine.synthesize("back", "af_heart", 1.0, "en-us"))
+        )
+        worker.start()
+        worker.join(0.2)
+        self.assertTrue(worker.is_alive(), "the request waits for the release to finish")
+        self.assertEqual(engine.status()["speaking"], True, "a queued request counts as busy")
+        finish_release.set()
+        reaper.join(5)
+        worker.join(5)
+        self.assertEqual(result, [FAKE_WAV])
+        self.assertEqual(events, ["load", "release start", "release end", "load"])
+        self.assertTrue(engine.is_loaded())
+
+    def test_a_request_during_the_first_load_shares_that_load(self):
+        loading = threading.Event()
+        finish_load = threading.Event()
+
+        def slow_loader(model_path, voices_path):
+            self.loads.append(model_path)
+            loading.set()
+            finish_load.wait(5)
+            return FakeKokoro()
+
+        engine = self.engine(idle=0.01, loader=slow_loader)
+        first = threading.Thread(target=engine.synthesize, args=("one", "af_heart", 1.0, "en-us"))
+        first.start()
+        self.assertTrue(loading.wait(5))
+        second = threading.Thread(target=engine.synthesize, args=("two", "af_heart", 1.0, "en-us"))
+        second.start()
+        self.clock.now += 3600
+        self.assertFalse(engine.unload_if_idle(), "never unloads during a load")
+        finish_load.set()
+        first.join(5)
+        second.join(5)
+        self.assertEqual(len(self.loads), 1)
+        self.assertTrue(engine.is_loaded())
+
+    def test_unload_never_waits_for_a_busy_model(self):
+        self.gate = threading.Event()
+        engine = self.engine(idle=1)
+        worker = threading.Thread(target=engine.synthesize, args=("long", "af_heart", 1.0, "en-us"))
+        worker.start()
+        self.assertTrue(self.kokoro_started())
+        self.clock.now += 3600
+        started = time.monotonic()
+        self.assertFalse(engine.unload_if_idle())
+        self.assertLess(time.monotonic() - started, 0.5, "the reaper must not block on a synthesis")
+        self.gate.set()
+        worker.join(5)
+
     def test_health_and_voices_never_load_the_model(self):
         engine = self.engine()
         httpd = server.create_server(engine, "127.0.0.1", 0)
@@ -485,6 +616,19 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(server.lang_for_voice("jf_alpha"), "ja")
         self.assertEqual(server.lang_for_voice("zm_yunxi"), "cmn")
         self.assertEqual(server.lang_for_voice("qq_unknown"), "en-us")
+
+    def test_is_loopback_host(self):
+        for host in ("127.0.0.1", "127.1.2.3", "::1", "[::1]", "localhost", "LOCALHOST", "::ffff:127.0.0.1"):
+            self.assertTrue(server.is_loopback_host(host), host)
+        for host in ("0.0.0.0", "::", "", "192.168.1.20", "10.0.0.5", "example.com", "::ffff:192.168.1.2"):
+            self.assertFalse(server.is_loopback_host(host), host)
+
+    def test_exposure_warning(self):
+        self.assertIsNone(server.exposure_warning("127.0.0.1", 7478))
+        warning = server.exposure_warning("0.0.0.0", 7478)
+        self.assertIn("WARNING", warning)
+        self.assertIn("0.0.0.0:7478", warning)
+        self.assertIn("no authentication", warning)
 
     def test_is_allowed_origin(self):
         self.assertTrue(server.is_allowed_origin(None))
