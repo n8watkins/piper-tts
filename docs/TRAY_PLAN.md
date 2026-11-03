@@ -1,185 +1,103 @@
-# N8 Tray plan: one `n8voice` module for both engines
+# N8 Tray: the `n8voice` module for both engines
 
-Status: plan only.
-No N8 Tray or n8piper code has been changed.
+Status: built.
+The module lives in the N8 Tray repo at `C:\Users\natha\scripts\n8tray\n8voice` (n8watkins/n8tray#6, N8 Tray 0.12.0) and replaced `n8piper` on 2026-11-02.
+Its README there is the reference for settings and behavior; this page records the design and the decisions behind it.
 
 ## Goal
 
-Replace the `n8piper` module (Piper only) with one N8 Tray module, **`n8voice`**, that shows and controls both VoiceDock engines:
+One N8 Tray module, **`n8voice`** (shown as "VoiceDock"), that shows and controls both VoiceDock engines and keeps a memory history:
 
-- **Piper** on Windows: the Node server in `servers/piper`, port 7477, as n8piper runs it today.
+- **Piper** on Windows: the Node server in `servers/piper`, port 7477.
 - **Kokoro** in WSL: the Python server in `servers/kokoro`, port 7478, run by the systemd user unit `kokoro-tts`.
 
-The tray should answer "can VoiceDock read right now, and with which engines?" at a glance, and offer start, stop and restart per engine.
+The tray answers "can VoiceDock read right now, with which engines, and what does it cost in memory?" at a glance.
 
-## Today
+## Rules from the tray guide that shaped it
 
-| Piece | Where | Notes |
-| --- | --- | --- |
-| N8 Tray | `C:\Users\natha\scripts\n8tray\n8tray.ps1` (0.10.0) | Built-in panels per module; module list in `n8tray\config\settings.json`. |
-| n8piper | `C:\Users\natha\scripts\n8tray\n8piper` | `modular.json` id `piper-tts`; `piper-tts.ps1` wrapper; `config\settings.json` has `server.path`, `port`, `host`. Adopts an already-healthy server, starts `server.js` with a named Node copy (`piper-tts-server.exe`), writes a pid file, and only ever stops its own server. Health: `GET /health`, 300 ms. |
-| Piper server | `C:\Users\natha\Projects\Tools\piper-tts\local-piper-server` | Moves to `...\voicedock\servers\piper` with `UPDATE_WINDOWS_SERVER.md`. |
-| Kokoro server | WSL `Ubuntu-24.04`, `~/projects/extensions/kokoro-tts` (moving to `servers/kokoro`) | systemd user unit `kokoro-tts`, enabled with lingering, `Restart=always`. Uses about 610 MB of RAM once loaded. Reachable from Windows at `127.0.0.1:7478` through WSL localhost mirroring. |
-
-The tray guide's rules that shape this design (from `TRAY_MODULE_GUIDE.md`):
+From N8 Tray's `TRAY_MODULE_GUIDE.md`:
 
 - Process running is not enough for servers: use an HTTP health check with a short timeout.
-- Never call `wsl.exe` unless the module that needs it is running, because any `wsl.exe` call boots the VM and undoes `wsl --shutdown`.
-  Use `Test-N8WslDistroRunning` (which doesn't boot the VM) before any other WSL call.
-- No detection, health check or WSL call on the UI thread; background actions go through `Invoke-N8TrayAction`.
-- Secrets never on a command line (not relevant here: neither engine has secrets).
+- Never call `wsl.exe` unless needed, because any `wsl.exe` call boots the VM and undoes `wsl --shutdown`.
+  `wsl --list --running` is the one check that does not boot it.
+- No detection, health check or WSL call on the UI thread; panel buttons queue background actions.
 
-## Design
-
-### Folder
+## Layout
 
 ```
-C:\Users\natha\scripts\n8voice\
-├── modular.json
-├── n8voice.ps1                 wrapper N8 Tray launches (Piper supervisor + Kokoro control)
+C:\Users\natha\scripts\n8tray\n8voice\
+├── modular.json                id n8voice, name VoiceDock
+├── n8voice.ps1                 wrapper N8 Tray launches; also -Kokoro start|stop|restart and -Report
 ├── start-n8voice.bat           run the wrapper on its own
 ├── config\settings.example.json
 ├── config\settings.json        (not committed)
-├── logs\                       n8voice.log, piper-server.pid
-└── README.md
+├── report\                     memory-report.js and memory-history.js, copied from servers/piper/tray
+└── logs\                       n8voice.log, piper-server.pid, status.json, memory\
 ```
 
-### Module settings (`config\settings.json`)
+## Settings (`config\settings.json`)
 
 ```json
 {
-  "piper": {
-    "enabled": true,
-    "path": "C:\\Users\\natha\\Projects\\Tools\\voicedock\\servers\\piper",
-    "host": "127.0.0.1",
-    "port": 7477
-  },
-  "kokoro": {
-    "enabled": true,
-    "distro": "Ubuntu-24.04",
-    "unit": "kokoro-tts",
-    "host": "127.0.0.1",
-    "port": 7478,
-    "startWsl": false
-  }
+  "piper":  { "enabled": true, "path": "C:\\...\\servers\\piper", "host": "127.0.0.1", "port": 7477 },
+  "kokoro": { "enabled": true, "distro": "Ubuntu-24.04", "unit": "kokoro-tts", "host": "127.0.0.1", "port": 7478, "startWsl": false },
+  "memory": { "enabled": true, "intervalSeconds": 60, "keepDays": 30, "statusIntervalSeconds": 5, "wsl": true }
 }
 ```
 
-- `piper.*` keeps n8piper's meaning, so the migration is a copy of the old values.
-- `kokoro.startWsl`: when `false` (the default), n8voice never boots WSL to start Kokoro; if WSL is off, Kokoro shows as "WSL off" and the extension falls back to the browser voice for Kokoro profiles.
-  When `true`, starting the module (or **Start Kokoro**) may boot WSL.
-  Default `false` because Kokoro costs about 610 MB plus the WSL VM itself, and the RAM budget on this machine is tight.
+- `piper.*` keeps n8piper's meaning (`server.path`, `port`, `host`), so the migration was a copy.
+- `kokoro.startWsl` defaults to `false`: n8voice never boots WSL to start Kokoro.
+  Kokoro costs 300-700 MB while its model is loaded, plus the WSL VM itself, and the RAM budget on this machine is tight.
 
-### Manifest (`modular.json`)
+## Behavior
 
-```json
-{
-  "schemaVersion": 2,
-  "id": "n8voice",
-  "name": "VoiceDock",
-  "group": "Audio",
-  "description": "Runs the VoiceDock engines: Piper on Windows and Kokoro in WSL.",
-  "entry": "n8voice.ps1",
-  "settings": "config/settings.json",
-  "settingsExample": "config/settings.example.json",
-  "log": "logs/n8voice.log",
-  "autoStartDefault": true,
-  "monitor": { "type": "process", "match": "n8voice.ps1" },
-  "health": [
-    { "name": "Piper",  "type": "http", "path": "/health", "hostSetting": "piper.host",  "portSetting": "piper.port",  "timeoutMs": 300 },
-    { "name": "Kokoro", "type": "http", "path": "/health", "hostSetting": "kokoro.host", "portSetting": "kokoro.port", "timeoutMs": 300 }
-  ],
-  "tray": { "panel": "built-in" }
-}
-```
+**Piper** (carried over from n8piper):
 
-`health` becomes a list, which N8 Tray 0.10.0 doesn't read yet (it expects one object).
-That is the one tray-side schema change; see "Tray changes" below.
-The health checks are plain HTTP to `127.0.0.1`, so they never touch `wsl.exe`: a Kokoro check against a stopped WSL simply fails fast.
+- Adopts a server that already answers `/health` (for example the VoiceDock tray's) and never stops it.
+- Otherwise starts `server.js` with a named Node copy, `voicedock-piper.exe`, and writes `logs\piper-server.pid` as `<pid> <start ticks>` (guards against pid reuse).
+- New: restarts its server after 1, 2, 4, ... up to 60 s if it exits, and takes over if an adopted server stops answering.
 
-### Wrapper (`n8voice.ps1`)
+**Kokoro** (control only: systemd supervises it inside WSL):
 
-One long-running wrapper, as n8piper is today, single-instance by a named mutex (`Local\N8Voice_SingleInstance`).
+- On module start, if Kokoro does not answer, n8voice runs `systemctl --user start kokoro-tts` only when `wsl --list --running` shows the distro, or when `kokoro.startWsl` is true.
+- **Start / Restart / Stop Kokoro** in the panel run `n8voice.ps1 -Kokoro <action>` as a background action, with the same rule.
+- Module stop leaves Kokoro running; **Stop Kokoro** stops it until the next WSL boot.
 
-**Piper** (lifted from `piper-tts.ps1` with only renames):
+**Status and memory:**
 
-- If `GET /health` on the Piper port already answers, adopt it (another tray or app started it) and don't start a second one.
-- Otherwise start `server.js` with a named Node copy, `voicedock-piper.exe`, so Task Manager shows what it is, with `PORT`/`HOST` in the environment.
-- Write `logs\piper-server.pid` as `<pid> <start ticks>` (guards against pid reuse) and only ever stop that process.
-- If the server exits unexpectedly, restart it with a short backoff (n8piper currently just logs and exits; adding a restart loop is the one behavior change).
+- N8 Tray checks both `/health` endpoints over plain HTTP with a 300 ms timeout; that never touches `wsl.exe`.
+- n8voice writes `logs\status.json` every 5 s (each engine's memory, Kokoro's model state, the WSL VM's used memory from devguard's status file) and the tray poller reads it.
+- With Kokoro not answering, the panel shows "WSL off" when devguard's status file is stale and "Not reachable" otherwise.
+- Every 60 s n8voice appends `timestamp,engine,rss_mb,model_loaded,event,detail` rows to `logs\memory\memory-YYYY-MM-DD.csv` (the format in `servers/piper/tray/memory-history.js`), kept 30 days.
+- **Memory Report** builds `memory-report.html` with VoiceDock's report code (last hour, 24 hours, 7 days) and opens it.
 
-**Kokoro** (control only: systemd already supervises it inside WSL):
-
-- On module start, if `kokoro.enabled`:
-  1. `Test-N8WslDistroRunning -Distro <distro>`.
-  2. WSL running: `Invoke-N8WslShell` with `systemctl --user start <unit>` (a no-op when it already runs, which it normally does because the unit is enabled with lingering).
-  3. WSL off and `startWsl` is `false`: log "Kokoro: WSL off, not starting it" and leave it.
-  4. WSL off and `startWsl` is `true`: run the same `systemctl` command, which boots WSL; the unit then starts by itself.
-- **Stop Kokoro**: `systemctl --user stop <unit>`, only if the distro is running.
-  It stays stopped until the next WSL boot or **Start Kokoro** (systemd re-enables it at boot because the unit is enabled; a "keep stopped" option could `disable` it, but that is out of scope).
-- **Restart Kokoro**: `systemctl --user restart <unit>`; the model takes 1-2 s to load, so the panel shows "starting" until `/health` answers.
-- The wrapper never polls WSL; status comes only from the HTTP health check.
-- Module stop (tray **Stop VoiceDock**) stops the Piper server it started and leaves Kokoro running, because Kokoro also serves anything else that uses it in WSL.
-  The panel has an explicit **Stop Kokoro** for that.
-
-### Panel
+## Panel
 
 ```
-VoiceDock                         ● running
-  Piper   ● online   127.0.0.1:7477   [Restart] [Stop]
-  Kokoro  ● online   127.0.0.1:7478   [Restart] [Stop]
-  ─────────────────────────────────────────────
-  Open voices folder (Piper)    Open logs    Open settings
-  Open Kokoro logs (journalctl in a WSL terminal)
+VoiceDock
+  Piper: Running (port 7477) · 44 MB
+  Kokoro: Running (port 7478) · 90 MB, model unloaded
+  WSL VM 12.0 GB · history every 60 s
+  ─────────────────────────────
+  Memory Report · Open Memory History Folder · Open Piper Server Folder · Open Settings · Open Log
+  ─────────────────────────────
+  Start VoiceDock · Restart VoiceDock · Restart Piper Server · Stop VoiceDock
+  ─────────────────────────────
+  Start Kokoro · Restart Kokoro · Stop Kokoro
 ```
 
-- Per-engine status: online, offline, starting, external (Piper adopted), WSL off (Kokoro, from `Test-N8WslDistroRunning` on the poller, not the UI thread).
-- Status line in the tray menu: `VoiceDock: Piper ✓ Kokoro ✓`, or `VoiceDock: Piper ✓ Kokoro (WSL off)`.
-- Tray icon tint follows the worst state of the enabled engines, as other modules do.
+The right-click menu shows one status line, for example `VoiceDock: Piper running (port 7477) · 44 MB, Kokoro running (port 7478) · 90 MB, model unloaded`.
 
-### Tray changes (in `n8tray.ps1`, later)
+## Migration from n8piper (done 2026-11-02)
 
-1. Read `health` as either an object (old manifests) or a list (new), and keep one status per named check.
-2. A built-in `n8voice` panel, replacing the Piper panel, following the guide's "Add a module panel" steps.
-3. Wire **Start/Stop/Restart Kokoro** through `Invoke-N8TrayAction` so the WSL calls run in the background with a 5 s timeout.
+1. N8 Tray rewrites a `piper-tts` module entry in `config\settings.json` to `n8voice` on load, keeping `enabled` and `autoStart`.
+2. `n8piper\config\settings.json` `server.*` was copied to `n8voice\config\settings.json` `piper.*`.
+3. The `n8piper` folder was removed from the repo; its code is in git history (`git log -- n8piper`).
 
-No other module changes.
+Rollback: `config\settings.pre-n8voice.bak` and `config\n8piper-settings.pre-n8voice.bak` in the N8 Tray folder hold the old settings, and `git checkout 18cd5af -- n8piper n8tray.ps1` restores the old module and tray.
 
-## Migration from n8piper
+## Decisions
 
-1. Build `n8voice` next to `n8piper`; don't delete n8piper.
-2. Copy `n8piper\config\settings.json` → `n8voice\config\settings.json` under `piper`, and add the `kokoro` block.
-3. In `n8tray\config\settings.json`, disable the `piper-tts` module and add:
-
-   ```json
-   { "id": "n8voice", "manifest": "..\\n8voice\\modular.json", "enabled": true, "autoStart": true }
-   ```
-
-4. Restart N8 Tray.
-   Because n8voice adopts a healthy Piper server, there's no gap: the server n8piper started keeps serving until it exits, then n8voice starts its own on the next restart.
-   For a clean handover, stop the Piper module first, then enable n8voice.
-5. After a week without trouble, remove the `piper-tts` entry and archive `n8piper`.
-
-Rollback: re-enable `piper-tts`, disable `n8voice`, restart the tray.
-
-## Naming
-
-The module name follows the product name.
-If VoiceDock is renamed (see `docs/NAMING.md`), rename the folder, `id`, mutex, named Node copy and panel title together, before the module ships, so it only changes once.
-
-## Test plan
-
-- Piper adopt: start the standalone Piper tray first, then n8voice: status shows "external" and **Stop Piper** is disabled.
-- Piper own: n8voice starts Piper, `logs\piper-server.pid` is written, **Stop Piper** stops exactly that pid.
-- Piper crash: kill `voicedock-piper.exe`; n8voice restarts it within a few seconds.
-- Kokoro with WSL running: **Restart Kokoro** → status goes starting → online; `systemctl --user status kokoro-tts` agrees.
-- Kokoro with WSL shut down (`wsl --shutdown`) and `startWsl: false`: the module starts, Kokoro shows "WSL off", and `wsl --list --running` stays empty (n8voice did not boot WSL).
-- Same with `startWsl: true`: WSL boots and Kokoro comes online.
-- UI thread: clicking every panel button keeps the tray responsive (all WSL calls are background actions).
-- Extension: with Kokoro stopped from the panel, a Kokoro profile reads with the browser voice and the page says "Kokoro is offline"; after **Start Kokoro**, it reads with Kokoro again.
-
-## Open questions for the owner
-
-- Should starting VoiceDock ever boot WSL (`kokoro.startWsl`)? The plan defaults to no.
-- Keep the standalone Piper tray in `servers/piper/tray` for public users? The plan keeps it; n8voice coexists with it by adopting.
-- Module id: `n8voice` (matching the other n8 modules) with display name "VoiceDock", or rename both with the product?
+- Starting VoiceDock never boots WSL unless `kokoro.startWsl` is true.
+- The VoiceDock tray in `servers/piper/tray` stays for public users; n8voice coexists with it by adopting its Piper server.
+- Module id `n8voice` (matching the other n8 modules), display name "VoiceDock".
