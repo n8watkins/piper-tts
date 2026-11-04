@@ -78,7 +78,7 @@ npm run release -- --push      # check, bump, changelog, commit, tag, push
 
 - With no bump given it picks one: major for a breaking change, minor for a feature, otherwise patch.
 - Force one with `npm run release -- minor` (or `patch`, `major`, or an exact `1.4.0`).
-- It bumps `package.json`, `package-lock.json` and any file listed in `.release.json` `versionFiles`, adds a section to `CHANGELOG.md`, commits `chore(release): vX.Y.Z` and tags it.
+- It bumps `package.json`, `package-lock.json` and any file listed in `.release.json` `versionFiles` (a path, or `{ "path": "...", "pattern": "..." }` with one capture group for the version), adds a section to `CHANGELOG.md`, commits `chore(release): vX.Y.Z` and tags it.
 - With `--push` it first makes sure `main` isn't behind `origin/main` and runs `npm run release:check` (skip that with `--no-check`), so a tag is only pushed for a commit that passes. If the push is rejected, the release commit and tag are undone.
   On a branch that takes changes only through pull requests, it releases through one instead (see [Protecting the branch and the tags](#protecting-the-branch-and-the-tags)).
 - Releases are cut from `main` or `master`; a repo that ships from another long-lived branch lists it in `.release.json` `branches` (for example `["master", "release/1.x"]`).
@@ -157,7 +157,9 @@ Nobody bypasses the branch rules, admins included, so a coding agent signed in a
 Releases still work:
 
 - `npm run release -- --push` tries its usual push; when the rules reject it, it pushes the release commit to a `release/vX.Y.Z` branch, opens a pull request, merges it once its checks pass (up to `--pr-timeout`, default 30 minutes), and tags the merged commit.
-  If a check fails, it closes the pull request and undoes the release commit, so nothing is tagged.
+  It waits for and judges only what gates the merge: the branch's required checks (from its rulesets and branch protection), or, when it requires none, every GitHub Actions check.
+  Commit statuses and other apps' checks (a Vercel deploy, GitGuardian) that the rules don't require are printed and ignored, so a rate-limited preview deploy doesn't stop a release.
+  If a gating check fails, or a required check never reports before `--pr-timeout`, it closes the pull request and undoes the release commit, so nothing is tagged.
   `--via-pr` goes straight to the pull request, and `npm run release -- --dry-run --push` says which path it will take.
 - With a release train, the train's deploy key may bypass the branch rules (see [A protected main](#a-protected-main)); `--rotate-key` replaces the key.
 - `--admin-bypass` lets repository admins push straight to the branch again, for a repo that wants that trade-off.
