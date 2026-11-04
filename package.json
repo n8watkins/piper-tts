@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.0",
-    "release-kit": "github:n8watkins/release-kit#v2.7.0"
+    "release-kit": "github:n8watkins/release-kit#v2.7.1"
   },
   "engines": {
     "node": ">=18"
